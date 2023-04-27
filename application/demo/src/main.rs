@@ -1,0 +1,63 @@
+//! A proxy that forwards data to another server and forwards that server's
+//! responses back to clients.
+//!
+//! Because the Tokio runtime uses a thread pool, each TCP connection is
+//! processed concurrently with all other TCP connections across multiple
+//! threads.
+//!
+//! You can showcase this by running this in one terminal:
+//!
+//!     cargo run --example proxy
+//!
+//! This in another terminal
+//!
+//!     cargo run --example echo
+//!
+//! And finally this in another terminal
+//!
+//!     cargo run --example connect 127.0.0.1:8081
+//!
+//! This final terminal will connect to our proxy, which will in turn connect to
+//! the echo server, and you'll be able to see data flowing between them.
+
+#![warn(rust_2018_idioms)]
+
+use rtmp::handshake::context::Context;
+use rtmp::handshake::simple_hs::SimpleHandshake;
+use tokio::net::{TcpListener, TcpStream};
+
+use futures::FutureExt;
+use std::env;
+use std::error::Error;
+
+#[tokio::main(worker_threads = 2)]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let listen_addr = env::args()
+        .nth(1)
+        .unwrap_or_else(|| "127.0.0.1:8081".to_string());
+
+    println!("Listening on: {}", listen_addr);
+
+    let listener = TcpListener::bind(listen_addr).await?;
+
+    while let Ok((inbound, _)) = listener.accept().await {
+        let transfer = transfer(inbound).map(|r| {
+            if let Err(e) = r {
+                println!("Failed to transfer; error={}", e);
+            }
+        });
+
+        tokio::spawn(transfer);
+    }
+
+    Ok(())
+}
+
+async fn transfer(mut inbound: TcpStream) -> Result<(), Box<dyn Error>> {
+
+    let hs = SimpleHandshake{};
+    let hs_ctx = Context::new();
+    hs.handshake_with_client(hs_ctx, &mut inbound).await?;
+
+    Ok(())
+}

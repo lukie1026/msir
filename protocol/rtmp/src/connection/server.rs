@@ -1,5 +1,5 @@
-use super::stack::Base;
+use super::context::Context;
 
 pub struct Server {
-    stack: Stack,
+    ctx: Context,
 }

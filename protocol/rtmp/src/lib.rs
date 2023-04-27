@@ -6,7 +6,7 @@ pub mod chunk;
 pub mod error;
 pub mod handshake;
 pub mod message;
-pub mod stack;
+pub mod connection;
 
 #[cfg(test)]
 mod tests {

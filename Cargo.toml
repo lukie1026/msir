@@ -2,4 +2,5 @@
 
 members = [
     "protocol/rtmp",
+    "application/demo",
 ]
