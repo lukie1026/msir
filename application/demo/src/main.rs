@@ -25,6 +25,8 @@
 use rtmp::handshake::context::Context;
 use rtmp::handshake::simple_hs::SimpleHandshake;
 use tokio::net::{TcpListener, TcpStream};
+use tracing::{debug, info, error, info_span, instrument};
+use tracing_subscriber;
 
 use futures::FutureExt;
 use std::env;
@@ -32,28 +34,35 @@ use std::error::Error;
 
 #[tokio::main(worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn Error>> {
+    tracing_subscriber::fmt()
+        // enable everything
+        .with_max_level(tracing::Level::TRACE)
+        // sets this to be the default, global collector for this application.
+        .init();
+
     let listen_addr = env::args()
         .nth(1)
         .unwrap_or_else(|| "127.0.0.1:8081".to_string());
 
-    println!("Listening on: {}", listen_addr);
+    info!("Listening on: {}", listen_addr);
 
     let listener = TcpListener::bind(listen_addr).await?;
 
     while let Ok((inbound, _)) = listener.accept().await {
-        let transfer = transfer(inbound).map(|r| {
+        let rtmp_service = rtmp_service(inbound).map(|r| {
             if let Err(e) = r {
-                println!("Failed to transfer; error={}", e);
+                error!("Failed to transfer; error={}", e);
             }
         });
 
-        tokio::spawn(transfer);
+        tokio::spawn(rtmp_service);
     }
 
     Ok(())
 }
 
-async fn transfer(mut inbound: TcpStream) -> Result<(), Box<dyn Error>> {
+#[instrument]
+async fn rtmp_service(mut inbound: TcpStream) -> Result<(), Box<dyn Error>> {
 
     let hs = SimpleHandshake{};
     let hs_ctx = Context::new();

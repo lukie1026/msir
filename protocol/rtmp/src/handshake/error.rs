@@ -4,8 +4,7 @@ use std::io;
 
 #[derive(Debug, Error)]
 pub enum HandshakeError {
-    /// The bytes or amf0 values contained in the message were not what were expected, and thus
-    /// the message could not be parsed.
+    /// Invalid RTMP version
     #[error("Not support version {0}")]
     InvalidVersion(u8),
 

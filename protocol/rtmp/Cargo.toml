@@ -13,4 +13,5 @@ thiserror = "1.0.40"
 chrono = "0.4.24"
 byteorder = "1.4.3"
 rand = "0.8.5"
+tracing = "0.1.38"
 tokio = { version = "1.28.0", features = ["full"]}

@@ -1,5 +1,6 @@
 use super::{context::Context, error::HandshakeError, RTMP_VERSION, RTMP_HANDSHAKE_SIZE};
 use tokio::{net::TcpStream, io::AsyncWriteExt};
+use tracing::{trace, info, error, info_span, instrument};
 
 pub struct SimpleHandshake {}
 
@@ -22,7 +23,7 @@ impl SimpleHandshake {
 
         io.write_all(&ctx.c2[0..]).await?;
 
-        print!("Simple handshake completed");
+        info!("Simple handshake completed");
 
         Ok(())
     }
@@ -30,25 +31,25 @@ impl SimpleHandshake {
         
         ctx.read_c0c1(io).await?;
 
-        println!("Read c0c1 len {}", ctx.c0c1.len());
+        trace!("Read c0c1 len {}", ctx.c0c1.len());
 
         if ctx.c0c1[0] != RTMP_VERSION {
             return Err(HandshakeError::InvalidVersion(ctx.c0c1[0]));
         }
 
-        println!("Version check pass");
+        trace!("Version check pass");
 
         ctx.create_s0s1s2()?;
 
         io.write_all(&ctx.s0s1s2).await?;
 
-        println!("Send s0s1s2 len {}", ctx.s0s1s2.len());
+        trace!("Send s0s1s2 len {}", ctx.s0s1s2.len());
 
         ctx.read_c2(io).await?;
 
-        println!("Read c2 len {}", ctx.c2.len());
+        trace!("Read c2 len {}", ctx.c2.len());
 
-        println!("Simple handshake completed");
+        info!("Simple handshake completed");
 
         Ok(())
     }
