@@ -1,8 +1,9 @@
 use byteorder::{BigEndian, ByteOrder};
-use bytes::{Bytes, BytesMut};
+use bytes::{Bytes, BytesMut, BufMut};
 use rand::Rng;
 use tokio::{net::TcpStream, io::AsyncReadExt};
 use super::{error::HandshakeError, RTMP_HANDSHAKE_SIZE, RTMP_VERSION};
+use tracing::{trace, info, error, info_span, instrument};
 
 pub struct Context {
     // [1+1536]
@@ -45,14 +46,12 @@ impl Context {
     pub fn create_c0c1(&mut self) -> Result<(), HandshakeError> {
         if self.c0c1.is_empty() {
             self.c0c1.reserve(1+RTMP_HANDSHAKE_SIZE);
-            self.c0c1.extend_from_slice(&[RTMP_VERSION]);
-            let mut ts = [0_u8; 4];
-            BigEndian::write_u32(&mut ts, current_time());
-            self.c0c1.extend_from_slice(&ts);
-            self.c0c1.extend_from_slice(&[0; 4]);
+            self.c0c1.put_u8(RTMP_VERSION);
+            self.c0c1.put_u32(current_time());
+            self.c0c1.put_u32(0);
             let mut rng = rand::thread_rng();
             for _ in 0..(RTMP_HANDSHAKE_SIZE-8) {
-                self.c0c1.extend_from_slice(&[rng.gen()]);
+                self.c0c1.put_u8(rng.gen());
             }
         }
         Ok(())
@@ -60,25 +59,23 @@ impl Context {
     pub fn create_s0s1s2(&mut self) -> Result<(), HandshakeError> {
         if self.s0s1s2.is_empty() {
             self.s0s1s2.reserve(1+RTMP_HANDSHAKE_SIZE*2);
-            self.s0s1s2.extend_from_slice(&[RTMP_VERSION]);
-            let mut ts = [0_u8; 4];
-            BigEndian::write_u32(&mut ts, current_time());
-            self.s0s1s2.extend_from_slice(&ts);
+            self.s0s1s2.put_u8(RTMP_VERSION);
+            self.s0s1s2.put_u32(current_time());
             if self.c0c1.is_empty() {
-                self.s0s1s2.extend_from_slice(&[0; 4]);
+                self.s0s1s2.put_u32(0);
             } else {
-                self.s0s1s2.extend_from_slice(&self.c0c1[1..5]);
+                self.s0s1s2.put_slice(&self.c0c1[1..5])
             }
             let mut rng = rand::thread_rng();
             for _ in 0..(RTMP_HANDSHAKE_SIZE-8) {
-                self.s0s1s2.extend_from_slice(&[rng.gen()]);
+                self.s0s1s2.put_u8(rng.gen());
             }
             if self.c0c1.is_empty() {
                 for _ in 0..(RTMP_HANDSHAKE_SIZE) {
-                    self.s0s1s2.extend_from_slice(&[rng.gen()]);
+                    self.s0s1s2.put_u8(rng.gen());
                 }
             } else {
-                self.s0s1s2.extend_from_slice(&self.c0c1[1..RTMP_HANDSHAKE_SIZE+1]);
+                self.s0s1s2.put_slice(&self.c0c1[1..RTMP_HANDSHAKE_SIZE+1]);
             }
         }
         Ok(())
@@ -86,17 +83,15 @@ impl Context {
     pub fn create_c2(&mut self) -> Result<(), HandshakeError> {
         if self.c2.is_empty() {
             self.c2.reserve(RTMP_HANDSHAKE_SIZE);
-            let mut ts = [0_u8; 4];
-            BigEndian::write_u32(&mut ts, current_time());
-            self.c2.extend_from_slice(&ts);
+            self.c2.put_u32(current_time());
             if self.s0s1s2.is_empty() {
-                self.c2.extend_from_slice(&[0; 4]);
+                self.c2.put_u32(0);
             } else {
-                self.c2.extend_from_slice(&self.s0s1s2[1..5]);
+                self.c2.put_slice(&self.s0s1s2[1..5]);
             }
             let mut rng = rand::thread_rng();
             for _ in 0..(RTMP_HANDSHAKE_SIZE-8) {
-                self.c0c1.extend_from_slice(&[rng.gen()]);
+                self.c0c1.put_u8(rng.gen());
             }
         }
         Ok(())
