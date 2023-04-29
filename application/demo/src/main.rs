@@ -22,6 +22,7 @@
 
 #![warn(rust_2018_idioms)]
 
+use rtmp::chunk::ChunkCodec;
 use rtmp::handshake::context::Context;
 use rtmp::handshake::simple_hs::SimpleHandshake;
 use tokio::net::{TcpListener, TcpStream};
@@ -67,6 +68,11 @@ async fn rtmp_service(mut inbound: TcpStream) -> Result<(), Box<dyn Error>> {
     let hs = SimpleHandshake{};
     let hs_ctx = Context::new();
     hs.handshake_with_client(hs_ctx, &mut inbound).await?;
+
+    let mut chunk = ChunkCodec::new(inbound);
+    loop {
+        let msg = chunk.recv_rtmp_message().await?;
+    }
 
     Ok(())
 }

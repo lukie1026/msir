@@ -1,7 +1,9 @@
-use crate::chunk::{ChunkStream, ChunkCodec};
+use crate::{chunk::{ChunkStream, ChunkCodec}, message::RtmpMessage};
 use tokio::net::TcpStream;
 use std::collections::HashMap;
 use bytes::BytesMut;
+
+use super::error::ConnectionError;
 
 // TODO: support FastStreamBuffer && sendtimeout recvtimeout
 // struct StreamBuffer {
@@ -57,6 +59,9 @@ impl Context {
     }
     pub fn set_in_window_ack_size(&mut self, ack_size: u32) {
         self.in_ack_size.window = ack_size;
+    }
+    pub async fn recv_message(&mut self) -> Result<RtmpMessage, ConnectionError> {
+        Ok(self.chunkIo.recv_rtmp_message().await?)
     }
 
 }

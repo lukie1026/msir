@@ -46,7 +46,7 @@ const RTMP_CID_Audio: u32 = 0x07;
 
 type Result<T> = std::result::Result<T, ChunkError>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MessageHeader {
     pub timestamp_delta: u32,
     pub payload_length: usize,
@@ -110,13 +110,14 @@ impl ChunkCodec {
             chunk_streams: HashMap::new(),
         }
     }
-    pub async fn recv_rtmp_message(&mut self) -> Result<Option<RtmpMessage>> {
+    pub async fn recv_rtmp_message(&mut self) -> Result<RtmpMessage> {
         loop {
+            trace!("Receiving message...");
             let payload = self.recv_interlaced_message().await?;
             match payload {
-                Some(p) => {
-                    let msg = decode(p)?;
-                    return Ok(Some(msg));
+                Some((p, mh)) => {
+                    let msg = decode(p, mh)?;
+                    return Ok(msg);
                 },
                 None => continue,
             }
@@ -233,7 +234,8 @@ impl ChunkCodec {
         payload_size = cmp::min(payload_size, self.in_chunk_size);
 
         // create msg payload if not initialized
-        let mut buffer = Vec::<u8>::with_capacity(payload_size as usize);
+        let mut buffer = Vec::<u8>::with_capacity(payload_size);
+        unsafe { buffer.set_len(payload_size) };
         self.io.read_exact(&mut buffer).await?;
 
         // read payload to buffer
@@ -247,7 +249,7 @@ impl ChunkCodec {
         Ok(None)
     }
 
-    async fn recv_interlaced_message(&mut self) -> Result<Option<Bytes>> {
+    async fn recv_interlaced_message(&mut self) -> Result<Option<(Bytes, MessageHeader)>> {
         let (fmt, csid) = self.read_basic_header().await?;
         let mut chunk =  match self
             .chunk_streams
@@ -255,9 +257,19 @@ impl ChunkCodec {
                 Some((_, v)) => v,
                 None => ChunkStream::new(csid),
             };
+        trace!("Read basic header, fmt={} csid={}, chunk{:?}", fmt, csid, chunk);
         self.read_message_header(&mut chunk, fmt).await?;
+        trace!("Read message header, fmt={} csid={}, chunk{:?}", fmt, csid, chunk);
         let payload = self.read_message_payload(&mut chunk).await;
+        let mh = chunk.header.clone();
         self.chunk_streams.insert(csid, chunk);
-        payload
+
+        match payload {
+            Ok(p) => match p {
+                Some(b) => Ok(Some((b, mh))),
+                None => Ok(None),
+            },
+            Err(e) => Err(e),
+        }
     }
 }

@@ -1,6 +1,12 @@
+use std::io;
+
 use crate::chunk::MessageHeader;
+use amf::{Value, Version};
 use bytes::Bytes;
 use error::{MessageDecodeError, MessageEncodeError};
+use tracing::{trace, info, error, info_span, instrument};
+
+use self::types::msg_type::*;
 
 pub mod packet;
 pub mod types;
@@ -49,7 +55,54 @@ pub enum RtmpMessage {
     },
 }
 
-pub fn decode(data: Bytes) -> Result<RtmpMessage, MessageDecodeError> {
+pub fn decode(data: Bytes, mh: MessageHeader) -> Result<RtmpMessage, MessageDecodeError> {
+    match mh.message_type {
+        SET_CHUNK_SIZE => {
+            trace!("Recv message <set_chunk_size>");
+        },
+        ABORT => {
+            trace!("Recv message <abort>");
+        },
+        ACK => {
+            trace!("Recv message <ack>");
+        },
+        USER_CONTROL => {
+            trace!("Recv message <user_control>");
+        },
+        WIN_ACK_SIZE => {
+            trace!("Recv message <win_ack_size>");
+        },
+        SET_PEER_BW => {
+            trace!("Recv message <set_peer_bw>");
+        },
+        AUDIO => {
+            trace!("Recv message <audio>");
+        },
+        VIDEO => {
+            trace!("Recv message <video>");
+        },
+        AMF3_DATA => {
+            trace!("Recv message <amf3_data>");
+        },
+        AMF3_SHARED_OBJ => {
+            trace!("Recv message <amf3_shared_obj>");
+        },
+        AMF3_CMD | AMF0_CMD => {
+            trace!("Recv message <amf_cmd>");
+        },
+        AMF0_DATA => {
+            trace!("Recv message <amf0_data>");
+        },
+        AMF0_SHARED_OBJ => {
+            trace!("Recv message <afm0_shared_obj>");
+        },
+        AGGREGATE => {
+            trace!("Recv message <aggregate>");
+        },
+        other => {
+            trace!("Recv message <unknow {}>", other);
+        }
+    }
     Ok(RtmpMessage::Unknown {
         type_id: 88,
         data,
@@ -69,7 +122,7 @@ mod tests {
 
     #[test]
     fn test1() {
-        let p1 = decode(Bytes::new()).unwrap();
+        let p1 = decode(Bytes::new(), MessageHeader::default()).unwrap();
         let p2 = encode(p1).unwrap();
         print!("Lukie {:?}", p2);
     }
