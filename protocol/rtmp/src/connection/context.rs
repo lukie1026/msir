@@ -31,7 +31,7 @@ struct AckWindowSize {
 
 pub struct Context {
     // For peer in/out
-    chunkIo: ChunkCodec,
+    chunk_io: ChunkCodec,
     // requests: HashMap<f64, String>,
     // For peer in
     chunk_streams: HashMap<u32, ChunkStream>, // TODO: Performance
@@ -50,7 +50,7 @@ pub struct Context {
 impl Context {
     pub fn new(io: TcpStream) -> Self {
         Self {
-            chunkIo: ChunkCodec::new(io),
+            chunk_io: ChunkCodec::new(io),
             // requests: HashMap::new(),
             chunk_streams: HashMap::new(),
             in_ack_size: AckWindowSize::default(),
@@ -64,7 +64,7 @@ impl Context {
         self.in_ack_size.window = ack_size;
     }
     pub async fn recv_message(&mut self) -> Result<RtmpMessage, ConnectionError> {
-        let msg = self.chunkIo.recv_rtmp_message().await?;
+        let msg = self.chunk_io.recv_rtmp_message().await?;
         self.on_recv_message(&msg).await?;
         Ok(msg)
     }
@@ -78,7 +78,7 @@ impl Context {
                     warn!("Accept set_chunk_size {}", chunk_size);
                 }
                 trace!("Accept set_chunk_size {}", chunk_size);
-                self.chunkIo.set_in_chunk_size(chunk_size);
+                self.chunk_io.set_in_chunk_size(chunk_size);
             }
             RtmpMessage::SetWindowAckSize { ack_window_size } => {
                 let ack_window_size = *ack_window_size;
@@ -102,4 +102,24 @@ impl Context {
         }
         Ok(())
     }
+
+    // pub async fn expect_amf_command(&mut self, specified_cmd: &str) -> Result<RtmpMessage, ConnectionError> {
+    //     loop {
+    //         let msg = self.chunk_io.recv_rtmp_message().await?;
+    //         if msg.expect_amf(specified_cmd) {
+    //             return Ok(msg);
+    //         }
+    //     }
+    // }
+    pub async fn expect_amf_command(&mut self, specified_cmds: &[&str]) -> Result<RtmpMessage, ConnectionError> {
+        loop {
+            let msg = self.chunk_io.recv_rtmp_message().await?;
+            if msg.expect_amf(specified_cmds) {
+                return Ok(msg);
+            }
+        }
+    }
+    // pub async fn expect_result_or_error(&mut self, transcation_id: f64) -> Result<RtmpMessage, ConnectionError> {
+
+    // }
 }

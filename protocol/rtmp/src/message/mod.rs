@@ -15,6 +15,7 @@ use self::types::*;
 pub mod error;
 pub mod packet;
 pub mod types;
+pub mod request;
 
 #[derive(Debug)]
 pub struct RtmpPayload {
@@ -35,6 +36,7 @@ pub enum RtmpMessage {
     },
     Amf0Data {
         // packet: packet::Amf0DataPacket,
+        // FIXME: need to add command_name?
         values: Vec<Amf0Value>,
     },
     UserControl {
@@ -72,11 +74,95 @@ pub enum RtmpMessage {
     },
 }
 
+impl RtmpMessage {
+    // FIXME: need to judge Amf0Data?
+    pub fn expect_amf(&self, specified_cmds: &[&str]) -> bool {
+        if let RtmpMessage::Amf0Command { command_name, .. } = self {
+            for cmd in specified_cmds {
+                if command_name == *cmd {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+}
+
 pub fn decode(payload: RtmpPayload) -> Result<RtmpMessage, MessageDecodeError> {
     match payload.message_type {
+        msg_type::SET_CHUNK_SIZE => {
+            trace!("Recv message <set_chunk_size>");
+            let mut cursor = Cursor::new(payload.raw_data);
+            let chunk_size = cursor.read_u32::<BigEndian>()?;
+
+            return Ok(RtmpMessage::SetChunkSize { chunk_size });
+        }
+        msg_type::ABORT => {
+            trace!("Recv message <abort>");
+            let mut cursor = Cursor::new(payload.raw_data);
+            let stream_id = cursor.read_u32::<BigEndian>()?;
+
+            return Ok(RtmpMessage::Abort { stream_id });
+        }
+        msg_type::ACK => {
+            trace!("Recv message <ack>");
+            let mut cursor = Cursor::new(payload.raw_data);
+            let sequence_number = cursor.read_u32::<BigEndian>()?;
+
+            return Ok(RtmpMessage::Acknowledgement { sequence_number });
+        }
+        msg_type::USER_CONTROL => {
+            trace!("Recv message <user_control>");
+            let mut cursor = Cursor::new(payload.raw_data);
+            let mut extra_data: u32 = 0;
+            let event_type: u16 = cursor.read_u16::<BigEndian>()?;
+            let event_data = cursor.read_u32::<BigEndian>()?;
+            if event_type == user_ctrl_ev_type::SET_BUFFER_LENGTH {
+                extra_data = cursor.read_u32::<BigEndian>()?;
+            }
+
+            return Ok(RtmpMessage::UserControl {
+                event_type,
+                event_data,
+                extra_data,
+            });
+        }
+        msg_type::WIN_ACK_SIZE => {
+            trace!("Recv message <win_ack_size>");
+            let mut cursor = Cursor::new(payload.raw_data);
+            let ack_window_size = cursor.read_u32::<BigEndian>()?;
+
+            return Ok(RtmpMessage::SetWindowAckSize { ack_window_size });
+        }
+        msg_type::SET_PEER_BW => {
+            trace!("Recv message <set_peer_bw>");
+            let mut cursor = Cursor::new(payload.raw_data);
+            let size = cursor.read_u32::<BigEndian>()?;
+            let limit_type = cursor.read_u8()?;
+
+            return Ok(RtmpMessage::SetPeerBandwidth { size, limit_type });
+        }
+        msg_type::AUDIO => {
+            trace!("Recv message <audio>");
+        }
+        msg_type::VIDEO => {
+            trace!("Recv message <video>");
+        }
+        msg_type::AGGREGATE => {
+            trace!("Recv message <aggregate>");
+        }
+        msg_type::AMF3_SHARED_OBJ | msg_type::AMF0_SHARED_OBJ => {
+            trace!("Recv message <amf_shared_obj>");
+        }
+        msg_type::AMF3_DATA | msg_type::AMF0_DATA => {
+            trace!("Recv message <amf_data>");
+            let mut cursor = Cursor::new(payload.raw_data);
+            let values = rml_amf0::deserialize(&mut cursor)?;
+
+            return Ok(RtmpMessage::Amf0Data { values });
+        }
         msg_type::AMF3_CMD | msg_type::AMF0_CMD => {
             trace!("Recv message <amf_cmd>");
-
             let mut cursor = Cursor::new(payload.raw_data);
             if payload.message_type == msg_type::AMF3_CMD {
                 cursor.advance(1);
@@ -122,64 +208,6 @@ pub fn decode(payload: RtmpPayload) -> Result<RtmpMessage, MessageDecodeError> {
                 command_object,
                 additional_arguments: arguments,
             });
-        }
-        msg_type::SET_CHUNK_SIZE => {
-            trace!("Recv message <set_chunk_size>");
-        }
-        msg_type::ABORT => {
-            trace!("Recv message <abort>");
-        }
-        msg_type::ACK => {
-            trace!("Recv message <ack>");
-        }
-        msg_type::USER_CONTROL => {
-            trace!("Recv message <user_control>");
-            let mut cursor = Cursor::new(payload.raw_data);
-            let mut extra_data: u32 = 0;
-            let event_type: u16 = cursor.read_u16::<BigEndian>()?;
-            let event_data = cursor.read_u32::<BigEndian>()?;
-            if event_type == user_ctrl_ev_type::SET_BUFFER_LENGTH {
-                extra_data = cursor.read_u32::<BigEndian>()?;
-            }
-
-            return Ok(RtmpMessage::UserControl {
-                event_type,
-                event_data,
-                extra_data,
-            });
-        }
-        msg_type::WIN_ACK_SIZE => {
-            trace!("Recv message <win_ack_size>");
-            let mut cursor = Cursor::new(payload.raw_data);
-            let size = cursor.read_u32::<BigEndian>()?;
-
-            return Ok(RtmpMessage::SetWindowAckSize {
-                ack_window_size: size,
-            });
-        }
-        msg_type::SET_PEER_BW => {
-            trace!("Recv message <set_peer_bw>");
-        }
-        msg_type::AUDIO => {
-            trace!("Recv message <audio>");
-        }
-        msg_type::VIDEO => {
-            trace!("Recv message <video>");
-        }
-        msg_type::AMF3_DATA => {
-            trace!("Recv message <amf3_data>");
-        }
-        msg_type::AMF3_SHARED_OBJ => {
-            trace!("Recv message <amf3_shared_obj>");
-        }
-        msg_type::AMF0_DATA => {
-            trace!("Recv message <amf0_data>");
-        }
-        msg_type::AMF0_SHARED_OBJ => {
-            trace!("Recv message <afm0_shared_obj>");
-        }
-        msg_type::AGGREGATE => {
-            trace!("Recv message <aggregate>");
         }
         other => {
             trace!("Recv message <unknow {}>", other);
@@ -293,7 +321,7 @@ pub fn encode(
                 raw_data: Bytes::from(cursor.into_inner()),
             })
         }
-        RtmpMessage::Unknown { type_id, data } =>  Ok(RtmpPayload {
+        RtmpMessage::Unknown { type_id, data } => Ok(RtmpPayload {
             message_type: type_id,
             csid,
             timestamp,

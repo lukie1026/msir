@@ -3,10 +3,10 @@ pub fn add(left: usize, right: usize) -> usize {
 }
 
 pub mod chunk;
+pub mod connection;
 pub mod error;
 pub mod handshake;
 pub mod message;
-pub mod connection;
 
 #[cfg(test)]
 mod tests {

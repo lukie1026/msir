@@ -54,3 +54,9 @@ pub mod amf0_command_type {
     pub const PUBLISH: &str = "publish";
     pub const SAMPLE_ACCESS: &str = "|RtmpSampleAccess";
 }
+
+pub mod rtmp_sig {
+    pub const RTMP_SIG_FMS_VER: &str = "3,5,3,888";
+    pub const RTMP_SIG_AMF0_VER: f64 = 0.0;
+    pub const RTMP_SIG_CLIENT_ID: &str = "ASAICiss";
+}

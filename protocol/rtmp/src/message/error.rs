@@ -1,5 +1,6 @@
 use rml_amf0::{Amf0DeserializationError, Amf0SerializationError};
 use thiserror::Error;
+use url::ParseError;
 
 use std::io;
 
@@ -15,7 +16,6 @@ pub enum MessageDecodeError {
 
     // #[error("Can not find request for command:{0} transcation_id:{1}")]
     // NoRequest(String, f64),
-
     /// The bytes in the message that were expected to be AMF0 values were not properly encoded,
     /// and thus could not be read
     #[error("Can not decode message: {0}")]
@@ -39,4 +39,13 @@ pub enum MessageEncodeError {
     /// Failed to read the values from the input buffer
     #[error("An IO error occurred while reading the input: {0}")]
     Io(#[from] io::Error),
+}
+
+#[derive(Debug, Error)]
+pub enum ReuquestError {
+    #[error("Invalid tcUrl {0}")]
+    InvalidTcurl(#[from] ParseError),
+
+    #[error("Not found app in tcUrl: {0}")]
+    NotfoundApp(String),
 }

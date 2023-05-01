@@ -1,12 +1,15 @@
-use super::{context::Context, error::HandshakeError, RTMP_VERSION, RTMP_HANDSHAKE_SIZE};
-use tokio::{net::TcpStream, io::AsyncWriteExt};
-use tracing::{trace, info, error, info_span, instrument};
+use super::{context::Context, error::HandshakeError, RTMP_HANDSHAKE_SIZE, RTMP_VERSION};
+use tokio::{io::AsyncWriteExt, net::TcpStream};
+use tracing::{error, info, info_span, instrument, trace};
 
 pub struct SimpleHandshake {}
 
 impl SimpleHandshake {
-    pub async fn handshake_with_server(&self, mut ctx: Context, io: &mut TcpStream) -> Result<(), HandshakeError>{
-
+    pub async fn handshake_with_server(
+        &self,
+        ctx: &mut Context,
+        io: &mut TcpStream,
+    ) -> Result<(), HandshakeError> {
         ctx.create_c0c1()?;
 
         io.write_all(&ctx.c0c1[0..]).await?;
@@ -19,7 +22,8 @@ impl SimpleHandshake {
 
         // for simple handshake, copy s1 to c2.
         ctx.c2.clear();
-        ctx.c2.extend_from_slice(&ctx.s0s1s2[1..RTMP_HANDSHAKE_SIZE+1]);
+        ctx.c2
+            .extend_from_slice(&ctx.s0s1s2[1..RTMP_HANDSHAKE_SIZE + 1]);
 
         io.write_all(&ctx.c2[0..]).await?;
 
@@ -27,8 +31,11 @@ impl SimpleHandshake {
 
         Ok(())
     }
-    pub async fn handshake_with_client(&self, mut ctx: Context, io: &mut TcpStream) -> Result<(), HandshakeError>{
-        
+    pub async fn handshake_with_client(
+        &self,
+        ctx: &mut Context,
+        io: &mut TcpStream,
+    ) -> Result<(), HandshakeError> {
         ctx.read_c0c1(io).await?;
 
         trace!("Read c0c1 len {}", ctx.c0c1.len());

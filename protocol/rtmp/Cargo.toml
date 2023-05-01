@@ -15,3 +15,4 @@ rand = "0.8.5"
 tracing = "0.1.38"
 tokio = { version = "1.28.0", features = ["full"]}
 rml_amf0 = "0.3.0"
+url = "2.3.1"

@@ -1,7 +1,5 @@
 use rml_amf0::Amf0Value;
 
-use super::error::MessageDecodeError;
-
 #[derive(Debug)]
 pub enum Amf0CommandPacket {
     ConnectApp {

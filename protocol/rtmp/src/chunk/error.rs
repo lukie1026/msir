@@ -1,5 +1,5 @@
-use thiserror::Error;
 use std::io;
+use thiserror::Error;
 
 use crate::message::error::{MessageDecodeError, MessageEncodeError};
 
