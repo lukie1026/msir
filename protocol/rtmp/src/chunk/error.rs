@@ -1,7 +1,7 @@
 use thiserror::Error;
 use std::io;
 
-use crate::message::error::MessageDecodeError;
+use crate::message::error::{MessageDecodeError, MessageEncodeError};
 
 #[derive(Debug, Error)]
 pub enum ChunkError {
@@ -20,8 +20,11 @@ pub enum ChunkError {
     #[error("Not found extend-timestamp")]
     InvalidExTimestamp,
 
-    #[error("Decode message failed")]
-    InvalidMessage(#[from] MessageDecodeError),
+    #[error("Decode message failed: {0}")]
+    DecodeMessageFailed(#[from] MessageDecodeError),
+
+    #[error("Encode message failed: {0}")]
+    EncodeMessageFailed(#[from] MessageEncodeError),
 
     // Failed to read the values
     #[error("An IO error occurred: {0}")]

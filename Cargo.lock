@@ -3,15 +3,6 @@
 version = 3
 
 [[package]]
-name = "amf"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c62d4a2b90719990d520439caec08f57b1b2c9243c04f1c9fb4f04519979aed"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -510,14 +501,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "rml_amf0"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63551cfcd4d1f42733c190e4b58dd268b1eacb73410d9afbf62784aa12cac240"
+dependencies = [
+ "byteorder",
+ "thiserror",
+]
+
+[[package]]
 name = "rtmp"
 version = "0.1.0"
 dependencies = [
- "amf",
  "byteorder",
  "bytes",
  "chrono",
  "rand",
+ "rml_amf0",
  "snafu",
  "thiserror",
  "tokio",

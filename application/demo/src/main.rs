@@ -25,8 +25,9 @@
 use rtmp::chunk::ChunkCodec;
 use rtmp::handshake::context::Context;
 use rtmp::handshake::simple_hs::SimpleHandshake;
+use rtmp::message::RtmpMessage;
 use tokio::net::{TcpListener, TcpStream};
-use tracing::{debug, info, error, info_span, instrument};
+use tracing::{debug, error, info, info_span, instrument, trace};
 use tracing_subscriber;
 
 use futures::FutureExt;
@@ -64,14 +65,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[instrument]
 async fn rtmp_service(mut inbound: TcpStream) -> Result<(), Box<dyn Error>> {
-
-    let hs = SimpleHandshake{};
+    let hs = SimpleHandshake {};
     let hs_ctx = Context::new();
     hs.handshake_with_client(hs_ctx, &mut inbound).await?;
 
     let mut chunk = ChunkCodec::new(inbound);
     loop {
         let msg = chunk.recv_rtmp_message().await?;
+
+        trace!("Got rtmp message: {:?}", msg);
+
+        let (app, reply) = chunk.handle_connect(msg);
+        if reply {
+            trace!("Relay connect: {:?}", app);
+            chunk.relay_connect(app).await?;
+            
+        }
+        
     }
 
     Ok(())

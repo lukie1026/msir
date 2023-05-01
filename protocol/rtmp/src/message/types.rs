@@ -36,3 +36,21 @@ pub mod user_ctrl_ev_type {
     pub const PING_RESPONSE: u16 = 7;
     pub const FMS_EVENT_0: u16 = 0x1a;
 }
+
+// The amf0 command message, command name macros
+pub mod amf0_command_type {
+    pub const COMMAND_CONNECT: &str = "connect";
+    pub const COMMAND_CREATE_STREAM: &str = "createStream";
+    pub const COMMAND_CLOSE_STREAM: &str = "closeStream";
+    pub const COMMAND_PLAY: &str = "play";
+    pub const COMMAND_PAUSE: &str = "pause";
+    pub const ON_BW_DONE: &str = "onBWDone";
+    pub const ON_STATUS: &str = "onStatus";
+    pub const RESULT: &str = "_result";
+    pub const ERROR: &str = "_error";
+    pub const RELEASE_STREAM: &str = "releaseStream";
+    pub const FC_PUBLISH: &str = "FCPublish";
+    pub const UNPUBLISH: &str = "FCUnpublish";
+    pub const PUBLISH: &str = "publish";
+    pub const SAMPLE_ACCESS: &str = "|RtmpSampleAccess";
+}

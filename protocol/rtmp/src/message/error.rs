@@ -1,4 +1,4 @@
-use amf::error::DecodeError;
+use rml_amf0::{Amf0DeserializationError, Amf0SerializationError};
 use thiserror::Error;
 
 use std::io;
@@ -10,13 +10,16 @@ use std::io;
 pub enum MessageDecodeError {
     /// The bytes or amf0 values contained in the message were not what were expected, and thus
     /// the message could not be parsed.
-    #[error("The message was not encoded in an expected format")]
-    InvalidMessageFormat,
+    #[error("The {0} field of the message was not expected")]
+    InvalidFormat(String),
+
+    // #[error("Can not find request for command:{0} transcation_id:{1}")]
+    // NoRequest(String, f64),
 
     /// The bytes in the message that were expected to be AMF0 values were not properly encoded,
     /// and thus could not be read
-    #[error("The message did no contain valid Amf0 encoded values: {0}")]
-    Amf0DeserializationError(#[from] DecodeError),
+    #[error("Can not decode message: {0}")]
+    AmfDecodeFailed(#[from] Amf0DeserializationError),
 
     /// Failed to read the values from the input buffer
     #[error("An IO error occurred while reading the input: {0}")]
@@ -28,7 +31,10 @@ pub enum MessageEncodeError {
     /// The bytes or amf0 values contained in the message were not what were expected, and thus
     /// the message could not be parsed.
     #[error("The message was not encoded in an expected format")]
-    InvalidMessageFormat,
+    InvalidFormat,
+
+    #[error("Can not encode message: {0}")]
+    AmfDecodeFailed(#[from] Amf0SerializationError),
 
     /// Failed to read the values from the input buffer
     #[error("An IO error occurred while reading the input: {0}")]
