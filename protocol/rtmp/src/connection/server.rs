@@ -65,9 +65,9 @@ impl Server {
                 let object_encoding = match properties.remove("objectEncoding") {
                     Some(value) => match value {
                         Amf0Value::Number(number) => number,
-                        _ => rtmp_sig::RTMP_SIG_AMF0_VER,
+                        _ => RTMP_SIG_AMF0_VER,
                     },
-                    None => rtmp_sig::RTMP_SIG_AMF0_VER,
+                    None => RTMP_SIG_AMF0_VER,
                 };
 
                 let mut request = Request::parse_from(tc_url)?;
