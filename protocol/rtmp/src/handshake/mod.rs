@@ -1,10 +1,10 @@
-use tokio::net::TcpStream;
 use self::error::HandshakeError;
+use tokio::net::TcpStream;
 
-mod context;
-mod simple_hs;
 mod complex_hs;
+mod context;
 pub mod error;
+mod simple_hs;
 
 const RTMP_VERSION: u8 = 3;
 const RTMP_HANDSHAKE_SIZE: usize = 1536;

@@ -14,8 +14,8 @@ use self::types::*;
 
 pub mod error;
 pub mod packet;
-pub mod types;
 pub mod request;
+pub mod types;
 
 #[derive(Debug)]
 pub struct RtmpPayload {

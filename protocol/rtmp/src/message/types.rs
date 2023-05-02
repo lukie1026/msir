@@ -56,7 +56,28 @@ pub mod amf0_command_type {
 }
 
 pub mod rtmp_sig {
-    pub const RTMP_SIG_FMS_VER: &str = "3,5,3,888";
+    pub const RTMP_SIG_FMS_VER: &str = "FMS/3,5,3,888";
     pub const RTMP_SIG_AMF0_VER: f64 = 0.0;
     pub const RTMP_SIG_CLIENT_ID: &str = "ASAICiss";
+}
+
+pub mod rtmp_status {
+    pub const STATUS_LEVEL: &str = "level";
+    pub const STATUS_CODE: &str = "code";
+    pub const STATUS_DESCRIPTION: &str = "description";
+    pub const STATUS_DETAILS: &str = "details";
+    pub const STATUS_CLIENT_ID: &str = "clientid";
+
+    pub const STATUS_LEVEL_STATUS: &str = "status";
+    pub const STATUS_LEVEL_ERROR: &str = "error";
+
+    pub const STATUS_CODE_CONNECT_SUCCESS: &str = "NetConnection.Connect.Success";
+    pub const STATUS_CODE_CONNECT_REJECTED: &str = "NetConnection.Connect.Rejected";
+    pub const STATUS_CODE_STREAM_RESET: &str = "NetStream.Play.Reset";
+    pub const STATUS_CODE_STREAM_START: &str = "NetStream.Play.Start";
+    pub const STATUS_CODE_STREAM_PAUSE: &str = "NetStream.Pause.Notify";
+    pub const STATUS_CODE_STREAM_UNPAUSE: &str = "NetStream.Unpause.Notify";
+    pub const STATUS_CODE_PUBLISH_START: &str = "NetStream.Publish.Start";
+    pub const STATUS_CODE_DATA_START: &str = "NetStream.Data.Start";
+    pub const STATUS_CODE_UNPUBLISH_SUCCESS: &str = "NetStream.Unpublish.Success";
 }

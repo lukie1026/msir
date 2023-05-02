@@ -1,6 +1,6 @@
 use crate::{
     chunk::{ChunkCodec, ChunkStream},
-    message::{types::*, RtmpMessage},
+    message::{types::*, RtmpMessage, RtmpPayload},
 };
 use bytes::BytesMut;
 use std::collections::HashMap;
@@ -103,6 +103,11 @@ impl Context {
         Ok(())
     }
 
+    pub async fn send_message(&mut self, msg: RtmpPayload) -> Result<(), ConnectionError> {
+        self.chunk_io.send_rtmp_message(msg).await?;
+        Ok(())
+    }
+
     // pub async fn expect_amf_command(&mut self, specified_cmd: &str) -> Result<RtmpMessage, ConnectionError> {
     //     loop {
     //         let msg = self.chunk_io.recv_rtmp_message().await?;
@@ -111,7 +116,10 @@ impl Context {
     //         }
     //     }
     // }
-    pub async fn expect_amf_command(&mut self, specified_cmds: &[&str]) -> Result<RtmpMessage, ConnectionError> {
+    pub async fn expect_amf_command(
+        &mut self,
+        specified_cmds: &[&str],
+    ) -> Result<RtmpMessage, ConnectionError> {
         loop {
             let msg = self.chunk_io.recv_rtmp_message().await?;
             if msg.expect_amf(specified_cmds) {

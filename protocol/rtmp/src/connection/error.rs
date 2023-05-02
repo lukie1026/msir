@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::chunk::error::ChunkError;
 use crate::handshake::error::HandshakeError;
-use crate::message::error::ReuquestError;
+use crate::message::error::{ReuquestError, MessageEncodeError};
 
 #[derive(Debug, Error)]
 pub enum ConnectionError {
@@ -21,6 +21,9 @@ pub enum ConnectionError {
 
     #[error("Parse tcUrl failed: {0}")]
     InvalidTcurl(#[from] ReuquestError),
+
+    #[error("Encode rtmp message failed: {0}")]
+    RtmpMessageEncode(#[from] MessageEncodeError),
 
     // Failed to read the values
     #[error("An IO error occurred: {0}")]
