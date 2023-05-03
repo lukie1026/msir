@@ -2,7 +2,7 @@ use crate::{
     chunk::{ChunkCodec, ChunkStream},
     message::{types::*, RtmpMessage, RtmpPayload},
 };
-use bytes::BytesMut;
+
 use std::collections::HashMap;
 use tokio::net::TcpStream;
 use tracing::{error, info, trace, warn};
@@ -103,8 +103,9 @@ impl Context {
         Ok(())
     }
 
-    pub async fn send_message(&mut self, msg: RtmpPayload) -> Result<(), ConnectionError> {
-        self.chunk_io.send_rtmp_message(msg).await?;
+    pub async fn send_message(&mut self, msg: RtmpMessage, timestamp: u32, csid: u32) -> Result<(), ConnectionError> {
+        let payload = crate::message::encode(msg, timestamp, csid)?;
+        self.chunk_io.send_rtmp_message(payload).await?;
         Ok(())
     }
 

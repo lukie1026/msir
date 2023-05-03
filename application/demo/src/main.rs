@@ -25,12 +25,13 @@
 use rtmp::connection::server;
 use rtmp::message::RtmpMessage;
 use tokio::net::{TcpListener, TcpStream};
-use tracing::{debug, error, info, info_span, instrument, trace};
+use tracing::{debug, error, info, info_span, instrument, trace, Instrument};
 use tracing_subscriber;
 
 use futures::FutureExt;
 use std::env;
 use std::error::Error;
+use std::os::fd::AsRawFd;
 
 #[tokio::main(worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -55,7 +56,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         });
 
-        tokio::spawn(rtmp_service);
+        tokio::spawn(rtmp_service.instrument(tracing::info_span!("RTMP-CONN")));
     }
 
     Ok(())
@@ -85,15 +86,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 //     Ok(())
 // }
 
-#[instrument]
-async fn rtmp_service(mut inbound: TcpStream) -> Result<(), Box<dyn Error>> {
+// #[instrument]
+async fn rtmp_service(inbound: TcpStream) -> Result<(), Box<dyn Error>> {
     let mut server = server::Server::new(inbound).await?;
+    
+    let req = server.connect_app().await?;
+    trace!("Request {:?}", req);
+    server.relay_connect_app(&req).await?;
+    
     loop {
-        // let msg = server.recv_message().await?;
-        // trace!("Got rtmp message: {:?}", msg);
-
-        let req = server.connect_app().await?;
-        trace!("Request {:?}", req);
+        server.recv_message().await?;
     }
     Ok(())
 }
