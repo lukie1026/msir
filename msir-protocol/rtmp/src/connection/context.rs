@@ -123,9 +123,13 @@ impl Context {
     ) -> Result<RtmpMessage, ConnectionError> {
         loop {
             let msg = self.chunk_io.recv_rtmp_message().await?;
+            if specified_cmds.len() == 0 {
+                return Ok(msg);
+            }
             if msg.expect_amf(specified_cmds) {
                 return Ok(msg);
             }
+            info!("Server ignore msg: {:?}", msg);
         }
     }
     // pub async fn expect_result_or_error(&mut self, transcation_id: f64) -> Result<RtmpMessage, ConnectionError> {

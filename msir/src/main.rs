@@ -37,7 +37,7 @@ use std::os::fd::AsRawFd;
 async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt()
         // enable everything
-        .with_max_level(tracing::Level::TRACE)
+        .with_max_level(tracing::Level::INFO)
         // sets this to be the default, global collector for this application.
         .init();
 
@@ -92,10 +92,11 @@ async fn rtmp_service(inbound: TcpStream) -> Result<(), Box<dyn Error>> {
     
     let req = server.connect_app().await?;
     trace!("Request {:?}", req);
-    server.relay_connect_app(&req).await?;
+    server.response_connect_app(&req).await?;
     
     loop {
-        server.recv_message().await?;
+        let msg = server.recv_message().await?;
+        info!("Server receive msg: {:?}", msg);
     }
     Ok(())
 }

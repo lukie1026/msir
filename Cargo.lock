@@ -129,17 +129,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "demo"
-version = "0.1.0"
-dependencies = [
- "futures",
- "rtmp",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -369,6 +358,21 @@ dependencies = [
  "wasi 0.11.0+wasi-snapshot-preview1",
  "windows-sys 0.45.0",
 ]
+
+[[package]]
+name = "msir"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "rtmp",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "msir-service"
+version = "0.1.0"
 
 [[package]]
 name = "nu-ansi-term"

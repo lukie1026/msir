@@ -1,5 +1,5 @@
 [package]
-name = "demo"
+name = "msir"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,4 +10,4 @@ futures = { version = "0.3"}
 tokio = { version = "1.28.0", features = ["full"]}
 tracing = "0.1.38"
 tracing-subscriber = "0.3"
-rtmp = { path = "../../protocol/rtmp/" }
+rtmp = { path = "../msir-protocol/rtmp/" }

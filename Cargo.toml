@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
-    "protocol/rtmp",
-    "application/demo",
+    "msir",
+    "msir-service",
+    "msir-protocol/rtmp",
 ]

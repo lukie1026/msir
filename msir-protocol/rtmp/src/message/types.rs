@@ -44,15 +44,15 @@ pub mod amf0_command_type {
     pub const COMMAND_CLOSE_STREAM: &str = "closeStream";
     pub const COMMAND_PLAY: &str = "play";
     pub const COMMAND_PAUSE: &str = "pause";
-    pub const ON_BW_DONE: &str = "onBWDone";
-    pub const ON_STATUS: &str = "onStatus";
-    pub const RESULT: &str = "_result";
-    pub const ERROR: &str = "_error";
-    pub const RELEASE_STREAM: &str = "releaseStream";
-    pub const FC_PUBLISH: &str = "FCPublish";
-    pub const UNPUBLISH: &str = "FCUnpublish";
-    pub const PUBLISH: &str = "publish";
-    pub const SAMPLE_ACCESS: &str = "|RtmpSampleAccess";
+    pub const COMMAND_ON_BW_DONE: &str = "onBWDone";
+    pub const COMMAND_ON_STATUS: &str = "onStatus";
+    pub const COMMAND_RESULT: &str = "_result";
+    pub const COMMAND_ERROR: &str = "_error";
+    pub const COMMAND_RELEASE_STREAM: &str = "releaseStream";
+    pub const COMMAND_FC_PUBLISH: &str = "FCPublish";
+    pub const COMMAND_UNPUBLISH: &str = "FCUnpublish";
+    pub const COMMAND_PUBLISH: &str = "publish";
+    pub const DATA_SAMPLE_ACCESS: &str = "|RtmpSampleAccess";
 }
 
 pub mod rtmp_sig {

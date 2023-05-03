@@ -1,13 +1,13 @@
 use crate::chunk::MessageHeader;
-use crate::message::packet::Amf0CommandPacket;
+
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{Buf, Bytes};
 use error::{MessageDecodeError, MessageEncodeError};
 use rml_amf0;
 use rml_amf0::Amf0Value;
-use std::collections::HashMap;
+
 use std::io::Cursor;
-use std::io::{self, BufRead};
+
 use tracing::{error, info, info_span, instrument, trace};
 
 use self::types::*;
@@ -231,8 +231,12 @@ pub fn encode(
             command_object,
             mut additional_arguments,
         } => {
+            let cmd = match command_name.is_empty() {
+                true => Amf0Value::Null,
+                false => Amf0Value::Utf8String(command_name),
+            };
             let mut values = vec![
-                Amf0Value::Utf8String(command_name),
+                cmd,
                 Amf0Value::Number(transaction_id),
                 command_object,
             ];
