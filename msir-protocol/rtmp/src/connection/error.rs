@@ -22,6 +22,12 @@ pub enum ConnectionError {
     #[error("Parse tcUrl failed: {0}")]
     InvalidTcurl(#[from] ReuquestError),
 
+    #[error("Create stream recursive depth")]
+    CreateStreamDepth,
+
+    #[error("The releaseStream has not stream_name")]
+    ReleaseStreamWithoutStream,
+
     #[error("Encode rtmp message failed: {0}")]
     RtmpMessageEncode(#[from] MessageEncodeError),
 

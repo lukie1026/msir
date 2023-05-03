@@ -77,7 +77,11 @@ pub enum RtmpMessage {
 impl RtmpMessage {
     // FIXME: need to judge Amf0Data?
     pub fn expect_amf(&self, specified_cmds: &[&str]) -> bool {
+        let all_cmds = specified_cmds.len() == 0;
         if let RtmpMessage::Amf0Command { command_name, .. } = self {
+            if all_cmds {
+                return true;
+            }
             for cmd in specified_cmds {
                 if command_name == *cmd {
                     return true;

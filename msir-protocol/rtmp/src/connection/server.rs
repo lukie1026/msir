@@ -1,6 +1,6 @@
 use rml_amf0::Amf0Value;
 use std::collections::HashMap;
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, stream};
 use tracing::{info, warn};
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
     },
 };
 
-use super::{context::Context, error::ConnectionError};
+use super::{context::Context, error::ConnectionError, RtmpConnType};
 
 pub struct Server {
     ctx: Context,
@@ -125,7 +125,7 @@ impl Server {
 
         self.send_message(message, 0, 0).await
     }
-    
+
     pub async fn identify_client(&mut self, req: &mut Request) -> Result<(), ConnectionError> {
         loop {
             match self.ctx.expect_amf_command(&[]).await? {
@@ -135,19 +135,36 @@ impl Server {
                     command_object,
                     additional_arguments,
                 } => {
+                    info!("Server receive {:?}", command_name);
                     return match command_name.as_str() {
                         COMMAND_PLAY => self.process_play(req).await,
-                        COMMAND_CREATE_STREAM => self.process_create_stream(req).await,
-                        COMMAND_RELEASE_STREAM => self.process_fmle_publish(req).await,
+                        COMMAND_CREATE_STREAM => {
+                            self.process_create_stream(req, transaction_id).await
+                        }
+                        COMMAND_RELEASE_STREAM => {
+                            if additional_arguments.len() < 1 {
+                                return Err(ConnectionError::ReleaseStreamWithoutStream);
+                            }
+                            match &additional_arguments[0] {
+                                Amf0Value::Utf8String(stream) => req.stream = Some(stream.clone()),
+                                _ => return Err(ConnectionError::ReleaseStreamWithoutStream),
+                            }
+                            self.process_fmle_publish(req, transaction_id).await
+                        }
                         _ => {
-                            let message = RtmpMessage::Amf0Command {
-                                command_name: "".to_string(),
-                                transaction_id,
-                                command_object: Amf0Value::Null,
-                                additional_arguments: vec![],
-                            };
-                            self.send_message(message, 0, 0).await?;
-                            continue
+                            // Response null first for the other call msg
+                            self.send_message(
+                                RtmpMessage::Amf0Command {
+                                    command_name: "".to_string(),
+                                    transaction_id,
+                                    command_object: Amf0Value::Null,
+                                    additional_arguments: vec![],
+                                },
+                                0,
+                                0,
+                            )
+                            .await?;
+                            continue;
                         }
                     };
                 }
@@ -155,10 +172,73 @@ impl Server {
             }
         }
     }
-    async fn process_create_stream(&mut self, req: &mut Request) -> Result<(), ConnectionError> {
-        Ok(())
+    async fn process_create_stream(
+        &mut self,
+        req: &mut Request,
+        transaction_id: f64,
+    ) -> Result<(), ConnectionError> {
+        let mut res_transaction_id = transaction_id;
+        for _ in 0..3 {
+            // Response CreateStream
+            self.send_message(
+                RtmpMessage::Amf0Command {
+                    command_name: COMMAND_RESULT.to_string(),
+                    transaction_id: res_transaction_id,
+                    command_object: Amf0Value::Null,
+                    additional_arguments: vec![Amf0Value::Number(super::DEFAULT_SID)],
+                },
+                0,
+                0,
+            )
+            .await?;
+            info!("Server response createStream: transaction={:?}", res_transaction_id);
+
+            match self
+                .ctx
+                .expect_amf_command(&[
+                    COMMAND_PLAY,
+                    COMMAND_PUBLISH,
+                    COMMAND_CREATE_STREAM,
+                    COMMAND_FC_PUBLISH,
+                ])
+                .await?
+            {
+                RtmpMessage::Amf0Command {
+                    command_name,
+                    transaction_id,
+                    command_object,
+                    additional_arguments,
+                } => {
+                    return match command_name.as_str() {
+                        COMMAND_PLAY => self.process_play(req).await,
+                        COMMAND_PUBLISH => self.process_flash_publish(req).await,
+                        COMMAND_FC_PUBLISH => self.process_haivision_publish(req).await,
+                        COMMAND_CREATE_STREAM => {
+                            res_transaction_id = transaction_id;
+                            continue;
+                        }
+                        _ => Err(ConnectionError::UnexpectedMessage),
+                    };
+                }
+                _ => return Err(ConnectionError::UnexpectedMessage),
+            }
+        }
+        Err(ConnectionError::CreateStreamDepth)
     }
-    async fn process_fmle_publish(&mut self, req: &mut Request) -> Result<(), ConnectionError> {
+    async fn process_fmle_publish(&mut self, req: &mut Request, transaction_id: f64) -> Result<(), ConnectionError> {
+        req.conn_type = RtmpConnType::FmlePublish;
+        self.send_message(
+            RtmpMessage::Amf0Command {
+                command_name: COMMAND_RESULT.to_string(),
+                transaction_id,
+                command_object: Amf0Value::Null,
+                additional_arguments: vec![Amf0Value::Undefined],
+            },
+            0,
+            0,
+        )
+        .await?;
+        info!("Server response releaseStream: transaction={:?}", transaction_id);
         Ok(())
     }
     async fn process_flash_publish(&mut self, req: &mut Request) -> Result<(), ConnectionError> {
@@ -171,6 +251,10 @@ impl Server {
         Ok(())
     }
     async fn process_play(&mut self, req: &mut Request) -> Result<(), ConnectionError> {
+        Ok(())
+    }
+
+    pub async fn start_fmle_publish(&mut self) -> Result<(), ConnectionError> {
         Ok(())
     }
 }

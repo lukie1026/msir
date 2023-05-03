@@ -90,13 +90,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 async fn rtmp_service(inbound: TcpStream) -> Result<(), Box<dyn Error>> {
     let mut server = server::Server::new(inbound).await?;
     
-    let req = server.connect_app().await?;
+    let mut req = server.connect_app().await?;
     trace!("Request {:?}", req);
     server.response_connect_app(&req).await?;
     
     loop {
-        let msg = server.recv_message().await?;
-        info!("Server receive msg: {:?}", msg);
+        // let msg = server.recv_message().await?;
+        // info!("Server receive msg: {:?}", msg);
+        server.identify_client(&mut req).await?;
+        info!("Identify req: {:?}", req);
     }
     Ok(())
 }
