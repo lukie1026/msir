@@ -38,9 +38,7 @@ impl Server {
         info!("Server response: {:?}", msg);
         self.ctx.send_message(msg, timestamp, csid).await
     }
-    pub async fn identify_client(
-        &mut self, /*, req: &mut Request*/
-    ) -> Result<Request, ConnectionError> {
+    pub async fn identify_client(&mut self) -> Result<Request, ConnectionError> {
         let mut req = self.connect_app().await?;
         loop {
             if let RtmpMessage::Amf0Command {
@@ -55,19 +53,15 @@ impl Server {
                     command_name, transaction_id
                 );
                 match command_name.as_str() {
-                    COMMAND_PLAY => self.process_play(&mut req).await?,
+                    COMMAND_PLAY => {
+                        self.process_play(&mut req, additional_arguments)?;
+                    }
                     COMMAND_CREATE_STREAM => {
                         self.process_create_stream(&mut req, transaction_id).await?;
                     }
                     COMMAND_RELEASE_STREAM => {
-                        if additional_arguments.len() < 1 {
-                            return Err(ConnectionError::ReleaseStreamWithoutStream);
-                        }
-                        match &additional_arguments[0] {
-                            Amf0Value::Utf8String(stream) => req.stream = Some(stream.clone()),
-                            _ => return Err(ConnectionError::ReleaseStreamWithoutStream),
-                        }
-                        self.process_fmle_publish(&mut req, transaction_id).await?
+                        self.process_fmle_publish(&mut req, transaction_id, additional_arguments)
+                            .await?
                     }
                     _ => {
                         // Response null first for the other call msg
@@ -86,7 +80,7 @@ impl Server {
             command_name,
             transaction_id,
             command_object,
-            additional_arguments,
+            ..
         } = self.ctx.expect_amf_command(&[COMMAND_CONNECT]).await?
         {
             info!("Server receive {:?} {:?}", command_name, command_object);
@@ -185,9 +179,12 @@ impl Server {
                     command_name, transaction_id
                 );
                 return match command_name.as_str() {
-                    COMMAND_PLAY => self.process_play(req).await,
-                    COMMAND_PUBLISH => self.process_flash_publish(req).await,
-                    COMMAND_FC_PUBLISH => self.process_haivision_publish(req).await,
+                    COMMAND_PLAY => self.process_play(req, additional_arguments),
+                    COMMAND_PUBLISH => self.process_flash_publish(req, additional_arguments),
+                    COMMAND_FC_PUBLISH => {
+                        self.process_haivision_publish(req, transaction_id, additional_arguments)
+                            .await
+                    }
                     COMMAND_CREATE_STREAM => {
                         res_transaction_id = transaction_id;
                         continue;
@@ -203,23 +200,74 @@ impl Server {
         &mut self,
         req: &mut Request,
         transaction_id: f64,
+        additional_arguments: Vec<Amf0Value>,
     ) -> Result<(), ConnectionError> {
         req.conn_type = RtmpConnType::FmlePublish;
+        if additional_arguments.len() < 1 {
+            return Err(ConnectionError::ReleaseStreamWithoutStream);
+        }
+        match &additional_arguments[0] {
+            Amf0Value::Utf8String(stream) => req.stream = Some(stream.clone()),
+            _ => return Err(ConnectionError::ReleaseStreamWithoutStream),
+        }
         // Response releaseStream
         self.send_message(RtmpMessage::new_release_stream_res(transaction_id), 0, 0)
             .await?;
         Ok(())
     }
-    async fn process_flash_publish(&mut self, req: &mut Request) -> Result<(), ConnectionError> {
+    fn process_flash_publish(
+        &mut self,
+        req: &mut Request,
+        additional_arguments: Vec<Amf0Value>,
+    ) -> Result<(), ConnectionError> {
+        req.conn_type = RtmpConnType::FlashPublish;
+        if additional_arguments.len() < 1 {
+            return Err(ConnectionError::InvalidPublish);
+        }
+        match &additional_arguments[0] {
+            Amf0Value::Utf8String(stream) => req.stream = Some(stream.clone()),
+            _ => return Err(ConnectionError::InvalidPublish),
+        }
         Ok(())
     }
     async fn process_haivision_publish(
         &mut self,
         req: &mut Request,
+        transaction_id: f64,
+        additional_arguments: Vec<Amf0Value>,
     ) -> Result<(), ConnectionError> {
+        req.conn_type = RtmpConnType::HaivisionPublish;
+        if additional_arguments.len() < 1 {
+            return Err(ConnectionError::InvalidPublish);
+        }
+        match &additional_arguments[0] {
+            Amf0Value::Utf8String(stream) => req.stream = Some(stream.clone()),
+            _ => return Err(ConnectionError::InvalidPublish),
+        }
+        // Response FCPublish
+        self.send_message(RtmpMessage::new_fcpublish_res(transaction_id), 0, 0)
+            .await?;
         Ok(())
     }
-    async fn process_play(&mut self, req: &mut Request) -> Result<(), ConnectionError> {
+    fn process_play(
+        &mut self,
+        req: &mut Request,
+        additional_arguments: Vec<Amf0Value>,
+    ) -> Result<(), ConnectionError> {
+        req.conn_type = RtmpConnType::Play;
+        if additional_arguments.len() < 1 {
+            return Err(ConnectionError::InvalidPlay);
+        }
+        match &additional_arguments[0] {
+            Amf0Value::Utf8String(stream) => req.stream = Some(stream.clone()),
+            _ => return Err(ConnectionError::InvalidPlay),
+        }
+        if additional_arguments.len() >= 3 {
+            match &additional_arguments[2] {
+                Amf0Value::Number(n) => req.duration = *n as u32,
+                _ => return Err(ConnectionError::InvalidPlay),
+            }
+        }
         Ok(())
     }
 

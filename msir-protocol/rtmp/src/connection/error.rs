@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::chunk::error::ChunkError;
 use crate::handshake::error::HandshakeError;
-use crate::message::error::{ReuquestError, MessageEncodeError};
+use crate::message::error::{MessageEncodeError, ReuquestError};
 
 #[derive(Debug, Error)]
 pub enum ConnectionError {
@@ -16,7 +16,7 @@ pub enum ConnectionError {
     #[error("Receive unexpected message")]
     UnexpectedMessage,
 
-    #[error("A connect_app msg is invalid")]
+    #[error("The connect_app msg is invalid")]
     InvalidConnectApp,
 
     #[error("Parse tcUrl failed: {0}")]
@@ -27,6 +27,12 @@ pub enum ConnectionError {
 
     #[error("The releaseStream has not stream_name")]
     ReleaseStreamWithoutStream,
+
+    #[error("The play msg is invalid")]
+    InvalidPlay,
+
+    #[error("The publish msg is invalid")]
+    InvalidPublish,
 
     #[error("Encode rtmp message failed: {0}")]
     RtmpMessageEncode(#[from] MessageEncodeError),

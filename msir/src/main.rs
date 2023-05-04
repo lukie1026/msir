@@ -80,11 +80,29 @@ async fn rtmp_service(inbound: TcpStream) -> Result<(), Box<dyn Error>> {
             RtmpMessage::Amf0Data { values } => {
                 info!("Server receive Amf0Data: {:?}", values);
             }
-            RtmpMessage::VideoData { timestamp, stream_id, payload} => {
-                info!("Server receive VideoData csid={} ts={} len={}", stream_id, timestamp, payload.len());
+            RtmpMessage::VideoData {
+                timestamp,
+                stream_id,
+                payload,
+            } => {
+                info!(
+                    "Server receive VideoData csid={} ts={} len={}",
+                    stream_id,
+                    timestamp,
+                    payload.len()
+                );
             }
-            RtmpMessage::AudioData { timestamp, stream_id, payload } => {
-                info!("Server receive AudioData csid={} ts={} len={}", stream_id, timestamp, payload.len());
+            RtmpMessage::AudioData {
+                timestamp,
+                stream_id,
+                payload,
+            } => {
+                info!(
+                    "Server receive AudioData csid={} ts={} len={}",
+                    stream_id,
+                    timestamp,
+                    payload.len()
+                );
             }
             other => {
                 info!("Server ignore msg {:?}", other);
