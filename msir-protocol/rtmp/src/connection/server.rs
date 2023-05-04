@@ -47,8 +47,8 @@ impl Server {
             if let RtmpMessage::Amf0Command {
                 command_name,
                 transaction_id,
-                command_object,
                 additional_arguments,
+                ..
             } = self.ctx.expect_amf_command(&[]).await?
             {
                 info!(
@@ -113,7 +113,6 @@ impl Server {
             };
 
             let request = Request::parse_from(tc_url)?;
-            // request.object_encoding = object_encoding;
 
             // Set in_win_ack, default = 0
             self.ctx.set_in_window_ack_size(0);
@@ -165,8 +164,8 @@ impl Server {
             if let RtmpMessage::Amf0Command {
                 command_name,
                 transaction_id,
-                command_object,
                 additional_arguments,
+                ..
             } = self
                 .ctx
                 .expect_amf_command(&[
@@ -305,7 +304,7 @@ impl Server {
         Ok(())
     }
     pub async fn start_fmle_publish(&mut self) -> Result<(), ConnectionError> {
-        // FCPublish && response _result
+        // FCPublish
         if let RtmpMessage::Amf0Command { transaction_id, .. } =
             self.ctx.expect_amf_command(&[COMMAND_FC_PUBLISH]).await?
         {
@@ -313,13 +312,14 @@ impl Server {
                 "Server receive {:?} transaction_id={}",
                 COMMAND_FC_PUBLISH, transaction_id
             );
+            // response _result
             self.send_message(RtmpMessage::new_fcpublish_res(transaction_id), 0, 0)
                 .await?;
         } else {
             return Err(ConnectionError::UnexpectedMessage);
         }
 
-        // createStream && response _result
+        // createStream
         if let RtmpMessage::Amf0Command { transaction_id, .. } = self
             .ctx
             .expect_amf_command(&[COMMAND_CREATE_STREAM])
@@ -329,34 +329,56 @@ impl Server {
                 "Server receive {:?} transaction_id={}",
                 COMMAND_CREATE_STREAM, transaction_id
             );
+            // response _result
             self.send_message(RtmpMessage::new_create_stream_res(transaction_id), 0, 0)
                 .await?;
         } else {
             return Err(ConnectionError::UnexpectedMessage);
         }
 
-        // publish && response onFCPublish, onStatus
-        if let RtmpMessage::Amf0Command { .. } =
+        // publish
+        if let RtmpMessage::Amf0Command { transaction_id, .. } =
             self.ctx.expect_amf_command(&[COMMAND_PUBLISH]).await?
         {
-            info!("Server receive {:?}", COMMAND_PUBLISH);
+            info!(
+                "Server receive {:?} transaction_id={}",
+                COMMAND_PUBLISH, transaction_id
+            );
+            // response onFCPublish(NetStream.Publish.Start)
             self.send_message(RtmpMessage::new_on_fcpublish(), 0, 0)
                 .await?;
-
+            // response onStatus(NetStream.Publish.Start)
             self.send_message(RtmpMessage::new_on_status_publish_start(), 0, 0)
                 .await?;
         } else {
             return Err(ConnectionError::UnexpectedMessage);
         }
-
         Ok(())
     }
     pub async fn start_haivision_publish(&mut self) -> Result<(), ConnectionError> {
-        // TODO: implement it
+        // publish
+        if let RtmpMessage::Amf0Command { transaction_id, .. } =
+            self.ctx.expect_amf_command(&[COMMAND_PUBLISH]).await?
+        {
+            info!(
+                "Server receive {:?} transaction_id={}",
+                COMMAND_PUBLISH, transaction_id
+            );
+            // response onFCPublish(NetStream.Publish.Start)
+            self.send_message(RtmpMessage::new_on_fcpublish(), 0, 0)
+                .await?;
+            // response onStatus(NetStream.Publish.Start)
+            self.send_message(RtmpMessage::new_on_status_publish_start(), 0, 0)
+                .await?;
+        } else {
+            return Err(ConnectionError::UnexpectedMessage);
+        }
         Ok(())
     }
     pub async fn start_flash_publish(&mut self) -> Result<(), ConnectionError> {
-        // TODO: implement it
+        // response onStatus(NetStream.Publish.Start)
+        self.send_message(RtmpMessage::new_on_status_publish_start(), 0, 0)
+            .await?;
         Ok(())
     }
 }
