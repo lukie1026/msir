@@ -14,7 +14,7 @@ pub enum RtmpConnType {
 }
 
 impl RtmpConnType {
-    pub fn is_publish(self) -> bool {
+    pub fn is_publish(&self) -> bool {
         match self {
             RtmpConnType::FmlePublish
             | RtmpConnType::FlashPublish

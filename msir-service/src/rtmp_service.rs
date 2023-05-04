@@ -1,5 +1,6 @@
 use rtmp::connection::server as rtmp_conn;
 use rtmp::connection::RtmpConnType;
+use rtmp::message::request::Request;
 use rtmp::message::RtmpMessage;
 use tokio::net::TcpStream;
 use tracing::{error, info, trace, warn};
@@ -38,10 +39,28 @@ impl RtmpService {
             }
             _ => {}
         }
+        return match req.conn_type.is_publish() {
+            true => self.publishing(&req).await,
+            false => self.playing(&req).await,
+        };
+    }
 
+    async fn playing(&mut self, req: &Request) -> Result<(), ServiceError> {
+        Ok(())
+    }
+    
+    async fn publishing(&mut self, req: &Request) -> Result<(), ServiceError> {
         loop {
             let msg = self.rtmp.recv_message().await?;
             match msg {
+                RtmpMessage::Amf0Command {
+                    command_name,
+                    transaction_id,
+                    command_object,
+                    additional_arguments,
+                } => {
+                    info!("Server receive Amf0Command: {:?}", command_name);
+                }
                 RtmpMessage::Amf0Data { values } => {
                     info!("Server receive Amf0Data: {:?}", values);
                 }
