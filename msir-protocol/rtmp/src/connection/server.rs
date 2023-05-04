@@ -7,7 +7,10 @@ use crate::{
     handshake,
     message::{
         request::Request,
-        types::{amf0_command_type::*, peer_bw_limit_type, rtmp_sig::*, rtmp_status::*},
+        types::{
+            amf0_command_type::*, peer_bw_limit_type, rtmp_sig::*, rtmp_status::*,
+            user_ctrl_ev_type::*, DEFAULT_SID,
+        },
         RtmpMessage,
     },
 };
@@ -271,6 +274,36 @@ impl Server {
         Ok(())
     }
 
+    pub async fn start_play(&mut self) -> Result<(), ConnectionError> {
+        // StreamBegin
+        self.send_message(
+            RtmpMessage::UserControl {
+                event_type: STREAM_BEGIN,
+                event_data: DEFAULT_SID as u32,
+                extra_data: 0,
+            },
+            0,
+            0,
+        )
+        .await?;
+
+        // onStatus(NetStream.Play.Reset)
+        self.send_message(RtmpMessage::new_on_status_play_reset(), 0, 0)
+            .await?;
+
+        // onStatus(NetStream.Play.Start)
+        self.send_message(RtmpMessage::new_on_status_play_start(), 0, 0)
+            .await?;
+
+        // |RtmpSampleAccess(true, true)
+        self.send_message(RtmpMessage::new_sample_access(), 0, 0)
+            .await?;
+
+        // onStatus(NetStream.Data.Start)
+        self.send_message(RtmpMessage::new_on_status_data_start(), 0, 0)
+            .await?;
+        Ok(())
+    }
     pub async fn start_fmle_publish(&mut self) -> Result<(), ConnectionError> {
         // FCPublish && response _result
         if let RtmpMessage::Amf0Command { transaction_id, .. } =
@@ -285,6 +318,7 @@ impl Server {
         } else {
             return Err(ConnectionError::UnexpectedMessage);
         }
+
         // createStream && response _result
         if let RtmpMessage::Amf0Command { transaction_id, .. } = self
             .ctx
@@ -300,6 +334,7 @@ impl Server {
         } else {
             return Err(ConnectionError::UnexpectedMessage);
         }
+
         // publish && response onFCPublish, onStatus
         if let RtmpMessage::Amf0Command { .. } =
             self.ctx.expect_amf_command(&[COMMAND_PUBLISH]).await?
@@ -314,6 +349,14 @@ impl Server {
             return Err(ConnectionError::UnexpectedMessage);
         }
 
+        Ok(())
+    }
+    pub async fn start_haivision_publish(&mut self) -> Result<(), ConnectionError> {
+        // TODO: implement it
+        Ok(())
+    }
+    pub async fn start_flash_publish(&mut self) -> Result<(), ConnectionError> {
+        // TODO: implement it
         Ok(())
     }
 }

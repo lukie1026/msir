@@ -69,9 +69,21 @@ async fn rtmp_service(inbound: TcpStream) -> Result<(), Box<dyn Error>> {
     let req = server.identify_client().await?;
     info!("Identify req: {:?}", req);
 
-    if let RtmpConnType::FmlePublish = req.conn_type {
-        info!("Start fmle publish...");
-        server.start_fmle_publish().await?;
+    // if let RtmpConnType::FmlePublish = req.conn_type {
+    //     info!("Start fmle publish...");
+    //     server.start_fmle_publish().await?;
+    // }
+
+    match req.conn_type {
+        RtmpConnType::FmlePublish => {
+            info!("Start fmle publish...");
+            server.start_fmle_publish().await?;
+        }
+        RtmpConnType::Play => {
+            info!("Start play...");
+            server.start_play().await?;
+        }
+        _ => {}
     }
 
     loop {

@@ -111,6 +111,15 @@ impl RtmpMessage {
             additional_arguments: vec![Amf0Value::Undefined],
         };
     }
+    pub fn new_sample_access() -> Self {
+        return RtmpMessage::Amf0Data {
+            values: vec![
+                Amf0Value::Utf8String(DATA_SAMPLE_ACCESS.to_string()),
+                Amf0Value::Boolean(true),
+                Amf0Value::Boolean(true),
+            ],
+        };
+    }
     pub fn new_on_fcpublish() -> Self {
         return RtmpMessage::Amf0Command {
             command_name: COMMAND_ON_FC_PUBLISH.to_string(),
@@ -151,6 +160,69 @@ impl RtmpMessage {
                     Amf0Value::Utf8String(RTMP_SIG_CLIENT_ID.to_string()),
                 ),
             ])],
+        };
+    }
+    pub fn new_on_status_play_reset() -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_ON_STATUS.to_string(),
+            transaction_id: 0.0,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![fast_create_amf0_obj(vec![
+                (
+                    STATUS_LEVEL,
+                    Amf0Value::Utf8String(STATUS_LEVEL_STATUS.to_string()),
+                ),
+                (
+                    STATUS_CODE,
+                    Amf0Value::Utf8String(STATUS_CODE_STREAM_RESET.to_string()),
+                ),
+                (
+                    STATUS_DESCRIPTION,
+                    Amf0Value::Utf8String("Playing and resetting stream.".to_string()),
+                ),
+                (STATUS_DETAILS, Amf0Value::Utf8String("stream".to_string())),
+                (
+                    STATUS_CLIENT_ID,
+                    Amf0Value::Utf8String(RTMP_SIG_CLIENT_ID.to_string()),
+                ),
+            ])],
+        };
+    }
+    pub fn new_on_status_play_start() -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_ON_STATUS.to_string(),
+            transaction_id: 0.0,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![fast_create_amf0_obj(vec![
+                (
+                    STATUS_LEVEL,
+                    Amf0Value::Utf8String(STATUS_LEVEL_STATUS.to_string()),
+                ),
+                (
+                    STATUS_CODE,
+                    Amf0Value::Utf8String(STATUS_CODE_STREAM_START.to_string()),
+                ),
+                (
+                    STATUS_DESCRIPTION,
+                    Amf0Value::Utf8String("Started playing stream.".to_string()),
+                ),
+                (STATUS_DETAILS, Amf0Value::Utf8String("stream".to_string())),
+                (
+                    STATUS_CLIENT_ID,
+                    Amf0Value::Utf8String(RTMP_SIG_CLIENT_ID.to_string()),
+                ),
+            ])],
+        };
+    }
+    pub fn new_on_status_data_start() -> Self {
+        return RtmpMessage::Amf0Data {
+            values: vec![
+                Amf0Value::Utf8String(COMMAND_ON_STATUS.to_string()),
+                fast_create_amf0_obj(vec![(
+                    STATUS_CODE,
+                    Amf0Value::Utf8String(STATUS_CODE_DATA_START.to_string()),
+                )]),
+            ],
         };
     }
     pub fn new_connect_app_res(object_encoding: f64) -> Self {
