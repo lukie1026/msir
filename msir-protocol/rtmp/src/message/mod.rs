@@ -79,6 +79,80 @@ pub enum RtmpMessage {
 }
 
 impl RtmpMessage {
+    pub fn new_null(transaction_id: f64) -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: "".to_string(),
+            transaction_id,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![],
+        };
+    }
+    pub fn new_create_stream_res(transaction_id: f64) -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_RESULT.to_string(),
+            transaction_id,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![Amf0Value::Number(DEFAULT_SID)],
+        };
+    }
+    pub fn new_release_stream_res(transaction_id: f64) -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_RESULT.to_string(),
+            transaction_id,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![Amf0Value::Undefined],
+        };
+    }
+    pub fn new_fcpublish_res(transaction_id: f64) -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_RESULT.to_string(),
+            transaction_id,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![Amf0Value::Undefined],
+        };
+    }
+    pub fn new_on_fcpublish() -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_ON_FC_PUBLISH.to_string(),
+            transaction_id: 0.0,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![fast_create_amf0_obj(vec![
+                (
+                    STATUS_CODE,
+                    Amf0Value::Utf8String(STATUS_CODE_PUBLISH_START.to_string()),
+                ),
+                (
+                    STATUS_DESCRIPTION,
+                    Amf0Value::Utf8String("Started publishing stream.".to_string()),
+                ),
+            ])],
+        };
+    }
+    pub fn new_on_status_publish_start() -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_ON_STATUS.to_string(),
+            transaction_id: 0.0,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![fast_create_amf0_obj(vec![
+                (
+                    STATUS_LEVEL,
+                    Amf0Value::Utf8String(STATUS_LEVEL_STATUS.to_string()),
+                ),
+                (
+                    STATUS_CODE,
+                    Amf0Value::Utf8String(STATUS_CODE_PUBLISH_START.to_string()),
+                ),
+                (
+                    STATUS_DESCRIPTION,
+                    Amf0Value::Utf8String("Started publishing stream.".to_string()),
+                ),
+                (
+                    STATUS_CLIENT_ID,
+                    Amf0Value::Utf8String(RTMP_SIG_CLIENT_ID.to_string()),
+                ),
+            ])],
+        };
+    }
     pub fn new_connect_app_res(object_encoding: f64) -> Self {
         return RtmpMessage::Amf0Command {
             command_name: COMMAND_RESULT.to_string(),

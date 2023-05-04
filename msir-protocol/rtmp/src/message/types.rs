@@ -83,3 +83,5 @@ pub mod rtmp_status {
     pub const STATUS_CODE_DATA_START: &str = "NetStream.Data.Start";
     pub const STATUS_CODE_UNPUBLISH_SUCCESS: &str = "NetStream.Unpublish.Success";
 }
+
+pub const DEFAULT_SID: f64 = 1.0;

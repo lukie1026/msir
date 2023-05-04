@@ -24,4 +24,3 @@ impl RtmpConnType {
     }
 }
 
-const DEFAULT_SID: f64 = 1.0;
