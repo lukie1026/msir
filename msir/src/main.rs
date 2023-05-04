@@ -22,7 +22,7 @@
 
 #![warn(rust_2018_idioms)]
 
-use rtmp::connection::server;
+use rtmp::connection::{server, RtmpConnType};
 use rtmp::message::RtmpMessage;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, error, info, info_span, instrument, trace, Instrument};
@@ -63,42 +63,36 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 // #[instrument]
-// async fn rtmp_service(mut inbound: TcpStream) -> Result<(), Box<dyn Error>> {
-//     let hs = SimpleHandshake {};
-//     let mut hs_ctx = Context::new();
-//     hs.handshake_with_client(&mut hs_ctx, &mut inbound).await?;
-
-//     let mut chunk = ChunkCodec::new(inbound);
-//     loop {
-//         let msg = chunk.recv_rtmp_message().await?;
-
-//         trace!("Got rtmp message: {:?}", msg);
-
-//         let (app, reply) = chunk.handle_connect(msg);
-//         if reply {
-//             trace!("Relay connect: {:?}", app);
-//             chunk.relay_connect(app).await?;
-
-//         }
-
-//     }
-
-//     Ok(())
-// }
-
-// #[instrument]
 async fn rtmp_service(inbound: TcpStream) -> Result<(), Box<dyn Error>> {
     let mut server = server::Server::new(inbound).await?;
     
     let mut req = server.connect_app().await?;
     trace!("Request {:?}", req);
     server.response_connect_app(&req).await?;
-    
-    loop {
-        // let msg = server.recv_message().await?;
-        // info!("Server receive msg: {:?}", msg);
-        server.identify_client(&mut req).await?;
-        info!("Identify req: {:?}", req);
+
+    server.identify_client(&mut req).await?;
+    info!("Identify req: {:?}", req);
+
+    if let RtmpConnType::FmlePublish = req.conn_type {
+        info!("Start fmle publish...");
+        server.start_fmle_publish().await?;
     }
-    Ok(())
+
+    loop {
+        let msg = server.recv_message().await?;
+        match msg {
+            RtmpMessage::Amf0Data { values } => {
+                info!("Server receive Amf0Data: {:?}", values);
+            }
+            RtmpMessage::VideoData { timestamp, stream_id, payload} => {
+                info!("Server receive VideoData csid={} ts={} len={}", stream_id, timestamp, payload.len());
+            }
+            RtmpMessage::AudioData { timestamp, stream_id, payload } => {
+                info!("Server receive AudioData csid={} ts={} len={}", stream_id, timestamp, payload.len());
+            }
+            other => {
+                info!("Server ignore msg {:?}", other);
+            }
+        }
+    }
 }

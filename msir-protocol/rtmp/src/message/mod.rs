@@ -54,11 +54,15 @@ pub enum RtmpMessage {
         chunk_size: u32,
     },
     AudioData {
-        header: MessageHeader,
+        // header: MessageHeader,
+        stream_id: u32,
+        timestamp: u32,
         payload: Bytes,
     },
     VideoData {
-        header: MessageHeader,
+        // header: MessageHeader,
+        stream_id: u32,
+        timestamp: u32,
         payload: Bytes,
     },
     Abort {
@@ -148,9 +152,19 @@ pub fn decode(payload: RtmpPayload) -> Result<RtmpMessage, MessageDecodeError> {
         }
         msg_type::AUDIO => {
             trace!("Recv message <audio>");
+            return Ok(RtmpMessage::AudioData {
+                stream_id: payload.csid,
+                timestamp: payload.timestamp,
+                payload: payload.raw_data,
+            });
         }
         msg_type::VIDEO => {
             trace!("Recv message <video>");
+            return Ok(RtmpMessage::VideoData {
+                stream_id: payload.csid,
+                timestamp: payload.timestamp,
+                payload: payload.raw_data,
+            });
         }
         msg_type::AGGREGATE => {
             trace!("Recv message <aggregate>");
@@ -239,11 +253,7 @@ pub fn encode(
                 true => Amf0Value::Null,
                 false => Amf0Value::Utf8String(command_name),
             };
-            let mut values = vec![
-                cmd,
-                Amf0Value::Number(transaction_id),
-                command_object,
-            ];
+            let mut values = vec![cmd, Amf0Value::Number(transaction_id), command_object];
 
             values.append(&mut additional_arguments);
             let bytes = rml_amf0::serialize(&values)?;
@@ -300,15 +310,15 @@ pub fn encode(
             timestamp,
             raw_data: fast_u32_encode(chunk_size)?,
         }),
-        RtmpMessage::AudioData { header, payload } => Ok(RtmpPayload {
+        RtmpMessage::AudioData { payload, stream_id, timestamp } => Ok(RtmpPayload {
             message_type: msg_type::AUDIO,
-            csid,
+            csid: stream_id,
             timestamp,
             raw_data: payload,
         }),
-        RtmpMessage::VideoData { header, payload } => Ok(RtmpPayload {
+        RtmpMessage::VideoData { payload, stream_id, timestamp } => Ok(RtmpPayload {
             message_type: msg_type::VIDEO,
-            csid,
+            csid: stream_id,
             timestamp,
             raw_data: payload,
         }),

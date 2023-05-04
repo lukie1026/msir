@@ -52,6 +52,8 @@ pub mod amf0_command_type {
     pub const COMMAND_FC_PUBLISH: &str = "FCPublish";
     pub const COMMAND_UNPUBLISH: &str = "FCUnpublish";
     pub const COMMAND_PUBLISH: &str = "publish";
+    pub const COMMAND_ON_FC_PUBLISH: &str = "onFCPublish";
+    pub const COMMAND_ON_FC_UNPUBLISH: &str = "onFCUnpublish";
     pub const DATA_SAMPLE_ACCESS: &str = "|RtmpSampleAccess";
 }
 

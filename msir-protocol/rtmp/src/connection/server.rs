@@ -191,7 +191,10 @@ impl Server {
                 0,
             )
             .await?;
-            info!("Server response createStream: transaction={:?}", res_transaction_id);
+            info!(
+                "Server response createStream: transaction={:?}",
+                res_transaction_id
+            );
 
             match self
                 .ctx
@@ -225,7 +228,11 @@ impl Server {
         }
         Err(ConnectionError::CreateStreamDepth)
     }
-    async fn process_fmle_publish(&mut self, req: &mut Request, transaction_id: f64) -> Result<(), ConnectionError> {
+    async fn process_fmle_publish(
+        &mut self,
+        req: &mut Request,
+        transaction_id: f64,
+    ) -> Result<(), ConnectionError> {
         req.conn_type = RtmpConnType::FmlePublish;
         self.send_message(
             RtmpMessage::Amf0Command {
@@ -238,7 +245,10 @@ impl Server {
             0,
         )
         .await?;
-        info!("Server response releaseStream: transaction={:?}", transaction_id);
+        info!(
+            "Server response releaseStream: transaction={:?}",
+            transaction_id
+        );
         Ok(())
     }
     async fn process_flash_publish(&mut self, req: &mut Request) -> Result<(), ConnectionError> {
@@ -255,6 +265,101 @@ impl Server {
     }
 
     pub async fn start_fmle_publish(&mut self) -> Result<(), ConnectionError> {
+        // FCPublish && response _result
+        if let RtmpMessage::Amf0Command { transaction_id, .. } =
+            self.ctx.expect_amf_command(&[COMMAND_FC_PUBLISH]).await?
+        {
+            self.send_message(
+                RtmpMessage::Amf0Command {
+                    command_name: COMMAND_RESULT.to_string(),
+                    transaction_id,
+                    command_object: Amf0Value::Null,
+                    additional_arguments: vec![Amf0Value::Undefined],
+                },
+                0,
+                0,
+            )
+            .await?;
+        } else {
+            return Err(ConnectionError::UnexpectedMessage);
+        }
+        // createStream && response _result
+        if let RtmpMessage::Amf0Command { transaction_id, .. } = self
+            .ctx
+            .expect_amf_command(&[COMMAND_CREATE_STREAM])
+            .await?
+        {
+            self.send_message(
+                RtmpMessage::Amf0Command {
+                    command_name: COMMAND_RESULT.to_string(),
+                    transaction_id,
+                    command_object: Amf0Value::Null,
+                    additional_arguments: vec![Amf0Value::Number(super::DEFAULT_SID)],
+                },
+                0,
+                0,
+            )
+            .await?;
+        } else {
+            return Err(ConnectionError::UnexpectedMessage);
+        }
+        // publish && response onFCPublish, onStatus
+        if let RtmpMessage::Amf0Command { .. } =
+            self.ctx.expect_amf_command(&[COMMAND_PUBLISH]).await?
+        {
+            self.send_message(
+                RtmpMessage::Amf0Command {
+                    command_name: COMMAND_ON_FC_PUBLISH.to_string(),
+                    transaction_id: 0.0,
+                    command_object: Amf0Value::Null,
+                    additional_arguments: vec![fast_create_amf0_obj(vec![
+                        (
+                            STATUS_CODE,
+                            Amf0Value::Utf8String(STATUS_CODE_PUBLISH_START.to_string()),
+                        ),
+                        (
+                            STATUS_DESCRIPTION,
+                            Amf0Value::Utf8String("Started publishing stream.".to_string()),
+                        ),
+                    ])],
+                },
+                0,
+                0,
+            )
+            .await?;
+
+            self.send_message(
+                RtmpMessage::Amf0Command {
+                    command_name: COMMAND_ON_STATUS.to_string(),
+                    transaction_id: 0.0,
+                    command_object: Amf0Value::Null,
+                    additional_arguments: vec![fast_create_amf0_obj(vec![
+                        (
+                            STATUS_LEVEL,
+                            Amf0Value::Utf8String(STATUS_LEVEL_STATUS.to_string()),
+                        ),
+                        (
+                            STATUS_CODE,
+                            Amf0Value::Utf8String(STATUS_CODE_PUBLISH_START.to_string()),
+                        ),
+                        (
+                            STATUS_DESCRIPTION,
+                            Amf0Value::Utf8String("Started publishing stream.".to_string()),
+                        ),
+                        (
+                            STATUS_CLIENT_ID,
+                            Amf0Value::Utf8String(RTMP_SIG_CLIENT_ID.to_string()),
+                        ),
+                    ])],
+                },
+                0,
+                0,
+            )
+            .await?;
+        } else {
+            return Err(ConnectionError::UnexpectedMessage);
+        }
+
         Ok(())
     }
 }
