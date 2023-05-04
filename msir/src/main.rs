@@ -65,12 +65,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 // #[instrument]
 async fn rtmp_service(inbound: TcpStream) -> Result<(), Box<dyn Error>> {
     let mut server = server::Server::new(inbound).await?;
-    
-    let mut req = server.connect_app().await?;
-    trace!("Request {:?}", req);
-    server.response_connect_app(&req).await?;
 
-    server.identify_client(&mut req).await?;
+    let req = server.identify_client().await?;
     info!("Identify req: {:?}", req);
 
     if let RtmpConnType::FmlePublish = req.conn_type {

@@ -7,7 +7,7 @@ use crate::{
     handshake,
     message::{
         request::Request,
-        types::{amf0_command_type::*, rtmp_sig::*, rtmp_status::*},
+        types::{amf0_command_type::*, peer_bw_limit_type, rtmp_sig::*, rtmp_status::*},
         RtmpMessage,
     },
 };
@@ -35,9 +35,63 @@ impl Server {
         timestamp: u32,
         csid: u32,
     ) -> Result<(), ConnectionError> {
+        info!("Server response: {:?}", msg);
         self.ctx.send_message(msg, timestamp, csid).await
     }
-    pub async fn connect_app(&mut self) -> Result<Request, ConnectionError> {
+    pub async fn identify_client(
+        &mut self, /*, req: &mut Request*/
+    ) -> Result<Request, ConnectionError> {
+        let mut req = self.connect_app().await?;
+        loop {
+            match self.ctx.expect_amf_command(&[]).await? {
+                RtmpMessage::Amf0Command {
+                    command_name,
+                    transaction_id,
+                    command_object,
+                    additional_arguments,
+                } => {
+                    info!(
+                        "Server receive {:?} transaction_id={}",
+                        command_name, transaction_id
+                    );
+                    match command_name.as_str() {
+                        COMMAND_PLAY => self.process_play(&mut req).await?,
+                        COMMAND_CREATE_STREAM => {
+                            self.process_create_stream(&mut req, transaction_id).await?;
+                        }
+                        COMMAND_RELEASE_STREAM => {
+                            if additional_arguments.len() < 1 {
+                                return Err(ConnectionError::ReleaseStreamWithoutStream);
+                            }
+                            match &additional_arguments[0] {
+                                Amf0Value::Utf8String(stream) => req.stream = Some(stream.clone()),
+                                _ => return Err(ConnectionError::ReleaseStreamWithoutStream),
+                            }
+                            self.process_fmle_publish(&mut req, transaction_id).await?
+                        }
+                        _ => {
+                            // Response null first for the other call msg
+                            self.send_message(
+                                RtmpMessage::Amf0Command {
+                                    command_name: "".to_string(),
+                                    transaction_id,
+                                    command_object: Amf0Value::Null,
+                                    additional_arguments: vec![],
+                                },
+                                0,
+                                0,
+                            )
+                            .await?;
+                            continue;
+                        }
+                    };
+                    return Ok(req);
+                }
+                _ => return Err(ConnectionError::UnexpectedMessage),
+            }
+        }
+    }
+    async fn connect_app(&mut self) -> Result<Request, ConnectionError> {
         match self.ctx.expect_amf_command(&[COMMAND_CONNECT]).await? {
             RtmpMessage::Amf0Command {
                 command_name,
@@ -45,10 +99,7 @@ impl Server {
                 command_object,
                 additional_arguments,
             } => {
-                info!(
-                    "Server receive connect, {:?} {:?}",
-                    command_name, command_object
-                );
+                info!("Server receive {:?} {:?}", command_name, command_object);
 
                 if transaction_id != 1.0 {
                     warn!("Invalid transaction_id={} of connect_app", transaction_id);
@@ -74,102 +125,44 @@ impl Server {
                     None => RTMP_SIG_AMF0_VER,
                 };
 
-                let mut request = Request::parse_from(tc_url)?;
-                request.object_encoding = object_encoding;
+                let request = Request::parse_from(tc_url)?;
+                // request.object_encoding = object_encoding;
+
+                // Set in_win_ack, default = 0
+                self.ctx.set_in_window_ack_size(0);
+
+                // Set out_win_ack, default = 2500000
+                self.send_message(
+                    RtmpMessage::SetWindowAckSize {
+                        ack_window_size: 2500000,
+                    },
+                    0,
+                    0,
+                )
+                .await?;
+
+                // Set peer_bandwidth, default = 2500000
+                self.send_message(
+                    RtmpMessage::SetPeerBandwidth {
+                        size: 2500000,
+                        limit_type: peer_bw_limit_type::DYNAMIC,
+                    },
+                    0,
+                    0,
+                )
+                .await?;
+
+                // Set chunk_size, default = 60000
+                self.send_message(RtmpMessage::SetChunkSize { chunk_size: 60000 }, 0, 0)
+                    .await?;
+
+                // Response connect
+                self.send_message(RtmpMessage::new_connect_app_res(object_encoding), 0, 0)
+                    .await?;
+
                 Ok(request)
             }
             _ => Err(ConnectionError::UnexpectedMessage),
-        }
-    }
-    pub async fn response_connect_app(&mut self, req: &Request) -> Result<(), ConnectionError> {
-        let command_object = fast_create_amf0_obj(vec![
-            (
-                "fmsVer",
-                Amf0Value::Utf8String(RTMP_SIG_FMS_VER.to_string()),
-            ),
-            ("capabilities", Amf0Value::Number(127.0)),
-            ("mode", Amf0Value::Number(1.0)),
-        ]);
-
-        let args = fast_create_amf0_obj(vec![
-            (
-                STATUS_LEVEL,
-                Amf0Value::Utf8String(STATUS_LEVEL_STATUS.to_string()),
-            ),
-            (
-                STATUS_CODE,
-                Amf0Value::Utf8String(STATUS_CODE_CONNECT_SUCCESS.to_string()),
-            ),
-            (
-                STATUS_DESCRIPTION,
-                Amf0Value::Utf8String("Connection succeeded".to_string()),
-            ),
-            ("objectEncoding", Amf0Value::Number(req.object_encoding)),
-            (
-                "data",
-                fast_create_amf0_obj(vec![
-                    ("msir_version", Amf0Value::Utf8String("v0.1.0".to_string())),
-                    ("msir_auther", Amf0Value::Utf8String("Lukie".to_string())),
-                ]),
-            ),
-        ]);
-
-        let message = RtmpMessage::Amf0Command {
-            command_name: COMMAND_RESULT.to_string(),
-            transaction_id: 1.0,
-            command_object,
-            additional_arguments: vec![args],
-        };
-
-        info!("Server response connect: {:?}", message);
-
-        self.send_message(message, 0, 0).await
-    }
-
-    pub async fn identify_client(&mut self, req: &mut Request) -> Result<(), ConnectionError> {
-        loop {
-            match self.ctx.expect_amf_command(&[]).await? {
-                RtmpMessage::Amf0Command {
-                    command_name,
-                    transaction_id,
-                    command_object,
-                    additional_arguments,
-                } => {
-                    info!("Server receive {:?}", command_name);
-                    return match command_name.as_str() {
-                        COMMAND_PLAY => self.process_play(req).await,
-                        COMMAND_CREATE_STREAM => {
-                            self.process_create_stream(req, transaction_id).await
-                        }
-                        COMMAND_RELEASE_STREAM => {
-                            if additional_arguments.len() < 1 {
-                                return Err(ConnectionError::ReleaseStreamWithoutStream);
-                            }
-                            match &additional_arguments[0] {
-                                Amf0Value::Utf8String(stream) => req.stream = Some(stream.clone()),
-                                _ => return Err(ConnectionError::ReleaseStreamWithoutStream),
-                            }
-                            self.process_fmle_publish(req, transaction_id).await
-                        }
-                        _ => {
-                            // Response null first for the other call msg
-                            self.send_message(
-                                RtmpMessage::Amf0Command {
-                                    command_name: "".to_string(),
-                                    transaction_id,
-                                    command_object: Amf0Value::Null,
-                                    additional_arguments: vec![],
-                                },
-                                0,
-                                0,
-                            )
-                            .await?;
-                            continue;
-                        }
-                    };
-                }
-                _ => return Err(ConnectionError::UnexpectedMessage),
-            }
         }
     }
     async fn process_create_stream(
@@ -191,10 +184,6 @@ impl Server {
                 0,
             )
             .await?;
-            info!(
-                "Server response createStream: transaction={:?}",
-                res_transaction_id
-            );
 
             match self
                 .ctx
@@ -212,6 +201,10 @@ impl Server {
                     command_object,
                     additional_arguments,
                 } => {
+                    info!(
+                        "Server receive {:?} transaction_id={}",
+                        command_name, transaction_id
+                    );
                     return match command_name.as_str() {
                         COMMAND_PLAY => self.process_play(req).await,
                         COMMAND_PUBLISH => self.process_flash_publish(req).await,
@@ -245,10 +238,6 @@ impl Server {
             0,
         )
         .await?;
-        info!(
-            "Server response releaseStream: transaction={:?}",
-            transaction_id
-        );
         Ok(())
     }
     async fn process_flash_publish(&mut self, req: &mut Request) -> Result<(), ConnectionError> {
@@ -269,6 +258,10 @@ impl Server {
         if let RtmpMessage::Amf0Command { transaction_id, .. } =
             self.ctx.expect_amf_command(&[COMMAND_FC_PUBLISH]).await?
         {
+            info!(
+                "Server receive {:?} transaction_id={}",
+                COMMAND_FC_PUBLISH, transaction_id
+            );
             self.send_message(
                 RtmpMessage::Amf0Command {
                     command_name: COMMAND_RESULT.to_string(),
@@ -289,6 +282,10 @@ impl Server {
             .expect_amf_command(&[COMMAND_CREATE_STREAM])
             .await?
         {
+            info!(
+                "Server receive {:?} transaction_id={}",
+                COMMAND_CREATE_STREAM, transaction_id
+            );
             self.send_message(
                 RtmpMessage::Amf0Command {
                     command_name: COMMAND_RESULT.to_string(),
@@ -307,6 +304,7 @@ impl Server {
         if let RtmpMessage::Amf0Command { .. } =
             self.ctx.expect_amf_command(&[COMMAND_PUBLISH]).await?
         {
+            info!("Server receive {:?}", COMMAND_PUBLISH);
             self.send_message(
                 RtmpMessage::Amf0Command {
                     command_name: COMMAND_ON_FC_PUBLISH.to_string(),

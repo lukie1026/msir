@@ -6,11 +6,11 @@ use error::{MessageDecodeError, MessageEncodeError};
 use rml_amf0;
 use rml_amf0::Amf0Value;
 
-use std::io::Cursor;
+use std::{collections::HashMap, io::Cursor};
 
 use tracing::{error, info, info_span, instrument, trace};
 
-use self::types::*;
+use self::types::{amf0_command_type::*, rtmp_sig::*, rtmp_status::*, *};
 
 pub mod error;
 pub mod packet;
@@ -79,6 +79,43 @@ pub enum RtmpMessage {
 }
 
 impl RtmpMessage {
+    pub fn new_connect_app_res(object_encoding: f64) -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_RESULT.to_string(),
+            transaction_id: 1.0,
+            command_object: fast_create_amf0_obj(vec![
+                (
+                    "fmsVer",
+                    Amf0Value::Utf8String(RTMP_SIG_FMS_VER.to_string()),
+                ),
+                ("capabilities", Amf0Value::Number(127.0)),
+                ("mode", Amf0Value::Number(1.0)),
+            ]),
+            additional_arguments: vec![fast_create_amf0_obj(vec![
+                (
+                    STATUS_LEVEL,
+                    Amf0Value::Utf8String(STATUS_LEVEL_STATUS.to_string()),
+                ),
+                (
+                    STATUS_CODE,
+                    Amf0Value::Utf8String(STATUS_CODE_CONNECT_SUCCESS.to_string()),
+                ),
+                (
+                    STATUS_DESCRIPTION,
+                    Amf0Value::Utf8String("Connection succeeded".to_string()),
+                ),
+                ("objectEncoding", Amf0Value::Number(object_encoding)),
+                (
+                    "data",
+                    fast_create_amf0_obj(vec![
+                        ("msir_version", Amf0Value::Utf8String("v0.1.0".to_string())),
+                        ("msir_auther", Amf0Value::Utf8String("Lukie".to_string())),
+                    ]),
+                ),
+            ])],
+        };
+    }
+
     // FIXME: need to judge Amf0Data?
     pub fn expect_amf(&self, specified_cmds: &[&str]) -> bool {
         let all_cmds = specified_cmds.len() == 0;
@@ -310,13 +347,21 @@ pub fn encode(
             timestamp,
             raw_data: fast_u32_encode(chunk_size)?,
         }),
-        RtmpMessage::AudioData { payload, stream_id, timestamp } => Ok(RtmpPayload {
+        RtmpMessage::AudioData {
+            payload,
+            stream_id,
+            timestamp,
+        } => Ok(RtmpPayload {
             message_type: msg_type::AUDIO,
             csid: stream_id,
             timestamp,
             raw_data: payload,
         }),
-        RtmpMessage::VideoData { payload, stream_id, timestamp } => Ok(RtmpPayload {
+        RtmpMessage::VideoData {
+            payload,
+            stream_id,
+            timestamp,
+        } => Ok(RtmpPayload {
             message_type: msg_type::VIDEO,
             csid: stream_id,
             timestamp,
@@ -353,6 +398,14 @@ fn fast_u32_encode(value: u32) -> Result<Bytes, MessageEncodeError> {
     cursor.write_u32::<BigEndian>(value)?;
 
     Ok(Bytes::from(cursor.into_inner()))
+}
+
+fn fast_create_amf0_obj(values: Vec<(&str, Amf0Value)>) -> Amf0Value {
+    let mut map = HashMap::new();
+    for (k, v) in values {
+        map.insert(k.to_string(), v);
+    }
+    Amf0Value::Object(map)
 }
 
 #[cfg(test)]

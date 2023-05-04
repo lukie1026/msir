@@ -120,6 +120,9 @@ impl ChunkCodec {
     pub fn set_in_chunk_size(&mut self, n: usize) {
         self.in_chunk_size = n;
     }
+    pub fn set_out_chunk_size(&mut self, n: usize) {
+        self.out_chunk_size = n;
+    }
     pub async fn recv_rtmp_message(&mut self) -> Result<RtmpMessage> {
         loop {
             trace!("Receiving message...");

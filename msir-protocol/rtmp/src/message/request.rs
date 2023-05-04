@@ -51,7 +51,7 @@ pub struct Request {
     // Remote IP
     pub ip: Option<String>,
     // From amf::connect
-    pub object_encoding: f64,
+    // pub object_encoding: f64,
     // tcUrl: rtmp://a.com/live?key=1
     pub tc_url: Url,
     pub stream: Option<String>,
@@ -67,7 +67,7 @@ impl Request {
         // FIXME: whether to deal with the url with stream?
         Ok(Request {
             ip: None,
-            object_encoding: rtmp_sig::RTMP_SIG_AMF0_VER,
+            // object_encoding: rtmp_sig::RTMP_SIG_AMF0_VER,
             tc_url,
             stream: None,
             conn_type: RtmpConnType::Unknow,
