@@ -87,6 +87,14 @@ impl RtmpMessage {
             additional_arguments: vec![],
         };
     }
+    pub fn new_on_bw_done() -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_ON_BW_DONE.to_string(),
+            transaction_id: 0.0,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![],
+        };
+    }
     pub fn new_create_stream_res(transaction_id: f64) -> Self {
         return RtmpMessage::Amf0Command {
             command_name: COMMAND_RESULT.to_string(),

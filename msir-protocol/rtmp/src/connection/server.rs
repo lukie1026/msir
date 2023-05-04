@@ -146,6 +146,10 @@ impl Server {
             self.send_message(RtmpMessage::new_connect_app_res(object_encoding), 0, 0)
                 .await?;
 
+            // on bw_done
+            self.send_message(RtmpMessage::new_on_bw_done(), 0, 0)
+                .await?;
+
             return Ok(request);
         }
         return Err(ConnectionError::UnexpectedMessage);

@@ -22,8 +22,7 @@
 
 #![warn(rust_2018_idioms)]
 
-use rtmp::connection::{server, RtmpConnType};
-use rtmp::message::RtmpMessage;
+use msir_service::rtmp_service::RtmpService;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, error, info, info_span, instrument, trace, Instrument};
 use tracing_subscriber;
@@ -31,7 +30,6 @@ use tracing_subscriber;
 use futures::FutureExt;
 use std::env;
 use std::error::Error;
-use std::os::fd::AsRawFd;
 
 #[tokio::main(worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -64,61 +62,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 // #[instrument]
 async fn rtmp_service(inbound: TcpStream) -> Result<(), Box<dyn Error>> {
-    let mut server = server::Server::new(inbound).await?;
-
-    let req = server.identify_client().await?;
-    info!("Identify req: {:?}", req);
-
-    // if let RtmpConnType::FmlePublish = req.conn_type {
-    //     info!("Start fmle publish...");
-    //     server.start_fmle_publish().await?;
-    // }
-
-    match req.conn_type {
-        RtmpConnType::FmlePublish => {
-            info!("Start fmle publish...");
-            server.start_fmle_publish().await?;
-        }
-        RtmpConnType::Play => {
-            info!("Start play...");
-            server.start_play().await?;
-        }
-        _ => {}
-    }
-
-    loop {
-        let msg = server.recv_message().await?;
-        match msg {
-            RtmpMessage::Amf0Data { values } => {
-                info!("Server receive Amf0Data: {:?}", values);
-            }
-            RtmpMessage::VideoData {
-                timestamp,
-                stream_id,
-                payload,
-            } => {
-                info!(
-                    "Server receive VideoData csid={} ts={} len={}",
-                    stream_id,
-                    timestamp,
-                    payload.len()
-                );
-            }
-            RtmpMessage::AudioData {
-                timestamp,
-                stream_id,
-                payload,
-            } => {
-                info!(
-                    "Server receive AudioData csid={} ts={} len={}",
-                    stream_id,
-                    timestamp,
-                    payload.len()
-                );
-            }
-            other => {
-                info!("Server ignore msg {:?}", other);
-            }
-        }
-    }
+    RtmpService::new(inbound).await?.run().await?;
+    Ok(())
 }
