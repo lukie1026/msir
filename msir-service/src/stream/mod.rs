@@ -1,11 +1,15 @@
-use std::collections::HashMap;
-
+use self::{
+    error::StreamError,
+    hub::{Hub, HubEvent},
+};
 use rtmp::message::RtmpMessage;
+use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::error::ServiceError;
+pub mod error;
+pub mod hub;
 
 #[derive(Debug)]
 pub enum RoleType {
@@ -15,7 +19,7 @@ pub enum RoleType {
 
 #[derive(Debug)]
 pub enum Token {
-    Failure(String),
+    Failure(StreamError),
     ProducerToken(Hub),
     ComsumerToken(mpsc::UnboundedReceiver<RtmpMessage>),
 }
@@ -24,87 +28,61 @@ pub enum Token {
 pub struct RegisterEv {
     pub uid: Uuid,
     pub role: RoleType,
-    pub resource_id: String,
+    pub stream_key: String,
     pub ret: oneshot::Sender<Token>,
-}
-
-impl RegisterEv {
-    pub fn new(
-        uid: Uuid,
-        resource_id: String,
-        role: RoleType,
-        ret: oneshot::Sender<Token>,
-    ) -> Self {
-        Self {
-            uid,
-            resource_id,
-            role,
-            ret,
-        }
-    }
 }
 
 pub struct UnregisterEv {
     pub uid: Uuid,
     pub role: RoleType,
-    pub resource_id: String,
+    pub stream_key: String,
 }
 
-impl UnregisterEv {
-    pub fn new(uid: Uuid, resource_id: String, role: RoleType) -> Self {
-        Self {
-            uid,
-            role,
-            resource_id,
-        }
-    }
-}
-
-pub enum ResourceEvent {
+pub enum StreamEvent {
     Register(RegisterEv),
     Unregister(UnregisterEv),
 }
 
 pub struct Manager {
     pool: HashMap<String, mpsc::UnboundedSender<HubEvent>>,
-    receiver: mpsc::UnboundedReceiver<ResourceEvent>,
+    receiver: mpsc::UnboundedReceiver<StreamEvent>,
 }
 
 impl Manager {
-    pub fn new(receiver: mpsc::UnboundedReceiver<ResourceEvent>) -> Self {
+    pub fn new(receiver: mpsc::UnboundedReceiver<StreamEvent>) -> Self {
         Self {
             receiver,
             pool: HashMap::new(),
         }
     }
 
-    pub async fn run(&mut self) -> Result<(), ServiceError> {
+    pub async fn run(&mut self) -> Result<(), StreamError> {
         info!("Resource Manager daemon start...");
         while let Some(ev) = self.receiver.recv().await {
             match ev {
-                ResourceEvent::Register(ev) => self.register(ev).await,
-                ResourceEvent::Unregister(ev) => self.unregister(ev).await,
+                StreamEvent::Register(ev) => self.register(ev).await,
+                StreamEvent::Unregister(ev) => self.unregister(ev).await,
             }
         }
         Ok(())
     }
 
     async fn register(&mut self, ev: RegisterEv) {
-        let hub_ev_tx = self.pool.get(&ev.resource_id);
+        let hub_ev_tx = self.pool.get(&ev.stream_key);
         info!(
             "received register [{}]: {:?} {:?} {:?}",
             hub_ev_tx.is_none(),
             ev.uid,
             ev.role,
-            ev.resource_id
+            ev.stream_key
         );
         let token = match ev.role {
             RoleType::Producer => {
                 if hub_ev_tx.is_some() {
-                    Token::Failure("duplicate publish".to_string())
+                    Token::Failure(StreamError::DuplicatePublish)
                 } else {
                     let (tx, rx) = mpsc::unbounded_channel();
-                    self.pool.insert(ev.resource_id, tx);
+                    self.pool.insert(ev.stream_key, tx);
                     Token::ProducerToken(Hub::new(rx))
                 }
             }
@@ -112,12 +90,12 @@ impl Manager {
                 if let Some(hub_ev_tx) = hub_ev_tx {
                     let (tx, rx) = mpsc::unbounded_channel();
                     if let Err(_) = hub_ev_tx.send(HubEvent::ComsumerJoin(ev.uid, tx)) {
-                        Token::Failure("send to hub failed".to_string())
+                        Token::Failure(StreamError::DisconnectHub)
                     } else {
                         Token::ComsumerToken(rx)
                     }
                 } else {
-                    Token::Failure("no publish".to_string())
+                    Token::Failure(StreamError::NoPublish)
                 }
             }
         };
@@ -127,13 +105,13 @@ impl Manager {
     }
 
     async fn unregister(&mut self, ev: UnregisterEv) {
-        let hub_ev_tx = self.pool.get(&ev.resource_id);
+        let hub_ev_tx = self.pool.get(&ev.stream_key);
         info!(
             "received unregister [{}]: {:?} {:?} {:?}",
             hub_ev_tx.is_none(),
             ev.uid,
             ev.role,
-            ev.resource_id
+            ev.stream_key
         );
 
         if let Some(hub_ev_tx) = hub_ev_tx {
@@ -144,31 +122,11 @@ impl Manager {
                     }
                 }
                 RoleType::Producer => {
-                    self.pool.remove(&ev.resource_id);
+                    self.pool.remove(&ev.stream_key);
                 }
             }
         } else {
             warn!("unregister failed for no publish");
-        }
-    }
-}
-
-pub enum HubEvent {
-    ComsumerJoin(Uuid, mpsc::UnboundedSender<RtmpMessage>),
-    ComsumerLeave(Uuid),
-}
-
-#[derive(Debug)]
-pub struct Hub {
-    pub receiver: mpsc::UnboundedReceiver<HubEvent>,
-    pub comsumers: Vec<mpsc::Sender<RtmpMessage>>,
-}
-
-impl Hub {
-    pub fn new(rx: mpsc::UnboundedReceiver<HubEvent>) -> Self {
-        Self {
-            receiver: rx,
-            comsumers: vec![],
         }
     }
 }

@@ -8,12 +8,11 @@ use tokio::sync::oneshot;
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
-use crate::error::ServiceError;
-use crate::resource::RegisterEv;
-use crate::resource::ResourceEvent;
-use crate::resource::RoleType;
-use crate::resource::Token;
-use crate::resource::UnregisterEv;
+use crate::{
+    error::ServiceError,
+    stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
+};
+// use crate::stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv};
 
 pub struct RtmpService {
     uid: Uuid,
@@ -33,7 +32,7 @@ impl RtmpService {
     }
     pub async fn run(
         &mut self,
-        mgr_tx: mpsc::UnboundedSender<ResourceEvent>,
+        mgr_tx: mpsc::UnboundedSender<StreamEvent>,
     ) -> Result<(), ServiceError> {
         // connect with client and identify conn type
         let req = self.rtmp.identify_client().await?;
@@ -70,16 +69,21 @@ impl RtmpService {
 
     async fn register(
         &mut self,
-        mgr_tx: &mpsc::UnboundedSender<ResourceEvent>,
+        mgr_tx: &mpsc::UnboundedSender<StreamEvent>,
         req: &Request,
     ) -> Result<(), ServiceError> {
-        let resource_id = req.app_stream();
+        let stream_key = req.app_stream();
         let role = match req.conn_type.is_publish() {
             true => RoleType::Producer,
             false => RoleType::Consumer,
         };
         let (reg_tx, reg_rx) = oneshot::channel();
-        let msg = ResourceEvent::Register(RegisterEv::new(self.uid, resource_id, role, reg_tx));
+        let msg = StreamEvent::Register(RegisterEv {
+            uid: self.uid,
+            stream_key,
+            role,
+            ret: reg_tx,
+        });
         if let Err(_) = mgr_tx.send(msg) {
             return Err(ServiceError::RegisterFailed(
                 "send register event failed".to_string(),
@@ -89,7 +93,7 @@ impl RtmpService {
         match reg_rx.await {
             Ok(token) => {
                 if let Token::Failure(e) = token {
-                    return Err(ServiceError::RegisterFailed(e));
+                    return Err(ServiceError::RegisterFailed(e.to_string()));
                 }
                 self.token = Some(token);
                 Ok(())
@@ -100,13 +104,17 @@ impl RtmpService {
         }
     }
 
-    async fn unregister(&mut self, mgr_tx: &mpsc::UnboundedSender<ResourceEvent>, req: &Request) {
-        let resource_id = req.app_stream();
+    async fn unregister(&mut self, mgr_tx: &mpsc::UnboundedSender<StreamEvent>, req: &Request) {
+        let stream_key = req.app_stream();
         let role = match req.conn_type.is_publish() {
             true => RoleType::Producer,
             false => RoleType::Consumer,
         };
-        let msg = ResourceEvent::Unregister(UnregisterEv::new(self.uid, resource_id, role));
+        let msg = StreamEvent::Unregister(UnregisterEv {
+            uid: self.uid,
+            stream_key,
+            role,
+        });
         if let Err(e) = mgr_tx.send(msg) {
             warn!("send unregister event failed: {}", e);
         }
