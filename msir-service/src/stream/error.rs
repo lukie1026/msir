@@ -10,4 +10,7 @@ pub enum StreamError {
 
     #[error("There was no publish")]
     NoPublish,
+
+    #[error("The hub had been closed")]
+    HubClosed,
 }

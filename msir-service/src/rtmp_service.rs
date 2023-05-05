@@ -1,3 +1,7 @@
+use crate::{
+    error::ServiceError,
+    stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
+};
 use rtmp::connection::server as rtmp_conn;
 use rtmp::connection::RtmpConnType;
 use rtmp::message::request::Request;
@@ -8,27 +12,16 @@ use tokio::sync::oneshot;
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
-use crate::{
-    error::ServiceError,
-    stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
-};
-// use crate::stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv};
-
 pub struct RtmpService {
     uid: Uuid,
     rtmp: rtmp_conn::Server,
-    token: Option<Token>,
 }
 
 impl RtmpService {
     pub async fn new(io: TcpStream) -> Result<Self, ServiceError> {
         let rtmp = rtmp_conn::Server::new(io).await?;
         let uid = Uuid::new_v4();
-        Ok(Self {
-            uid,
-            rtmp,
-            token: None,
-        })
+        Ok(Self { uid, rtmp })
     }
     pub async fn run(
         &mut self,
@@ -56,11 +49,11 @@ impl RtmpService {
             }
             _ => {}
         }
-        self.register(&mgr_tx, &req).await?;
+        let token = self.register(&mgr_tx, &req).await?;
         info!("Register {:?} succeed", self.uid);
         let ret = match req.conn_type.is_publish() {
-            true => self.publishing(&req).await,
-            false => self.playing(&req).await,
+            true => self.publishing(&req, token).await,
+            false => self.playing(&req, token).await,
         };
         info!("Unegister {:?} succeed", self.uid);
         self.unregister(&mgr_tx, &req).await;
@@ -71,7 +64,7 @@ impl RtmpService {
         &mut self,
         mgr_tx: &mpsc::UnboundedSender<StreamEvent>,
         req: &Request,
-    ) -> Result<(), ServiceError> {
+    ) -> Result<Token, ServiceError> {
         let stream_key = req.app_stream();
         let role = match req.conn_type.is_publish() {
             true => RoleType::Producer,
@@ -95,8 +88,8 @@ impl RtmpService {
                 if let Token::Failure(e) = token {
                     return Err(ServiceError::RegisterFailed(e.to_string()));
                 }
-                self.token = Some(token);
-                Ok(())
+                // self.token = Some(token);
+                Ok(token)
             }
             Err(_) => Err(ServiceError::RegisterFailed(
                 "recv register ret failed: ".to_string(),
@@ -120,51 +113,40 @@ impl RtmpService {
         }
     }
 
-    async fn playing(&mut self, req: &Request) -> Result<(), ServiceError> {
+    async fn playing(&mut self, req: &Request, token: Token) -> Result<(), ServiceError> {
         Ok(())
     }
 
-    async fn publishing(&mut self, req: &Request) -> Result<(), ServiceError> {
+    async fn publishing(&mut self, req: &Request, token: Token) -> Result<(), ServiceError> {
+        let mut hub = match token {
+            Token::ProducerToken(hub) => hub,
+            _ => return Err(ServiceError::InvalidToken),
+        };
         loop {
-            let msg = self.rtmp.recv_message().await?;
-            match msg {
-                RtmpMessage::Amf0Command {
-                    command_name,
-                    transaction_id,
-                    command_object,
-                    additional_arguments,
-                } => {
-                    info!("Server receive Amf0Command: {:?}", command_name);
+            tokio::select! {
+                msg = self.rtmp.recv_message() => {
+                    match msg {
+                        Ok(msg) => {
+                            match msg {
+                                RtmpMessage::Amf0Command {command_name, .. } => {
+                                    info!("Server receive Amf0Command: {:?}", command_name);
+                                }
+                                RtmpMessage::Amf0Data { values } => {
+                                    info!("Server receive Amf0Data: {:?}", values);
+                                }
+                                RtmpMessage::VideoData {..} => {}
+                                RtmpMessage::AudioData {..} => {}
+                                other => info!("Server ignore msg {:?}", other)
+                            }
+                        }
+                        Err(err) => return Err(ServiceError::ConnectionError(err)),
+                    }
                 }
-                RtmpMessage::Amf0Data { values } => {
-                    info!("Server receive Amf0Data: {:?}", values);
-                }
-                RtmpMessage::VideoData {
-                    timestamp,
-                    stream_id,
-                    payload,
-                } => {
-                    trace!(
-                        "Server receive VideoData csid={} ts={} len={}",
-                        stream_id,
-                        timestamp,
-                        payload.len()
-                    );
-                }
-                RtmpMessage::AudioData {
-                    timestamp,
-                    stream_id,
-                    payload,
-                } => {
-                    trace!(
-                        "Server receive AudioData csid={} ts={} len={}",
-                        stream_id,
-                        timestamp,
-                        payload.len()
-                    );
-                }
-                other => {
-                    info!("Server ignore msg {:?}", other);
+                ret = hub.process_hub_ev() => {
+                    info!("Proccess hub event: {:?}", ret);
+                    if let Err(e) = ret {
+                        return Err(ServiceError::HubError(e));
+                    }
                 }
             }
         }
