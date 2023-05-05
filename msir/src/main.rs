@@ -22,7 +22,7 @@
 
 #![warn(rust_2018_idioms)]
 
-use msir_service::resource::{Manager, RegisterEvent};
+use msir_service::resource::{Manager, ResourceEvent};
 use msir_service::rtmp_service::RtmpService;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // sets this to be the default, global collector for this application.
         .init();
 
-    let (tx, rx) = mpsc::unbounded_channel::<RegisterEvent>();
+    let (tx, rx) = mpsc::unbounded_channel::<ResourceEvent>();
     let res_mgr = resource_manager_start(rx).map(|r| {
         if let Err(e) = r {
             error!("Resource manager error={}", e);
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn resource_manager_start(
-    receiver: mpsc::UnboundedReceiver<RegisterEvent>,
+    receiver: mpsc::UnboundedReceiver<ResourceEvent>,
 ) -> Result<(), Box<dyn Error>> {
     Manager::new(receiver).run().await?;
     Ok(())
@@ -80,7 +80,7 @@ async fn resource_manager_start(
 // #[instrument]
 async fn rtmp_service(
     inbound: TcpStream,
-    tx: mpsc::UnboundedSender<RegisterEvent>,
+    tx: mpsc::UnboundedSender<ResourceEvent>,
 ) -> Result<(), Box<dyn Error>> {
     RtmpService::new(inbound).await?.run(tx).await?;
     Ok(())
