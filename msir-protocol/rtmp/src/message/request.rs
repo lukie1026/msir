@@ -74,4 +74,15 @@ impl Request {
             duration: 0,
         })
     }
+
+    pub fn app_stream(&self) -> String {
+        return format!(
+            "{}/{}",
+            self.tc_url.path(),
+            match &self.stream {
+                Some(s) => s,
+                None => "",
+            }
+        );
+    }
 }
