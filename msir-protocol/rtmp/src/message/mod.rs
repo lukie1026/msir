@@ -25,7 +25,7 @@ pub struct RtmpPayload {
     pub raw_data: Bytes,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RtmpMessage {
     Amf0Command {
         // packet: packet::Amf0CommandPacket,
@@ -77,6 +77,24 @@ pub enum RtmpMessage {
         data: Bytes,
     },
 }
+
+// impl Clone for RtmpMessage {
+//     fn clone(&self) -> Self {
+//         match self {
+//             Self::Amf0Command { command_name, transaction_id, command_object, additional_arguments } => Self::Amf0Command { command_name: command_name.clone(), transaction_id: transaction_id.clone(), command_object: command_object.clone(), additional_arguments: additional_arguments.clone() },
+//             Self::Amf0Data { values } => Self::Amf0Data { values: values.clone() },
+//             Self::UserControl { event_type, event_data, extra_data } => Self::UserControl { event_type: event_type.clone(), event_data: event_data.clone(), extra_data: extra_data.clone() },
+//             Self::SetWindowAckSize { ack_window_size } => Self::SetWindowAckSize { ack_window_size: ack_window_size.clone() },
+//             Self::Acknowledgement { sequence_number } => Self::Acknowledgement { sequence_number: sequence_number.clone() },
+//             Self::SetChunkSize { chunk_size } => Self::SetChunkSize { chunk_size: chunk_size.clone() },
+//             Self::AudioData { stream_id, timestamp, payload } => Self::AudioData { stream_id: stream_id.clone(), timestamp: timestamp.clone(), payload: payload.clone() },
+//             Self::VideoData { stream_id, timestamp, payload } => Self::VideoData { stream_id: stream_id.clone(), timestamp: timestamp.clone(), payload: payload.clone() },
+//             Self::Abort { stream_id } => Self::Abort { stream_id: stream_id.clone() },
+//             Self::SetPeerBandwidth { size, limit_type } => Self::SetPeerBandwidth { size: size.clone(), limit_type: limit_type.clone() },
+//             Self::Unknown { type_id, data } => Self::Unknown { type_id: type_id.clone(), data: data.clone() },
+//         }
+//     }
+// }
 
 impl RtmpMessage {
     pub fn new_null(transaction_id: f64) -> Self {

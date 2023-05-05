@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use rtmp::message::RtmpMessage;
 use tokio::sync::mpsc;
+use tracing::warn;
 use uuid::Uuid;
 
 use super::error::StreamError;
@@ -36,5 +37,14 @@ impl Hub {
             }
             None => Err(StreamError::HubClosed),
         }
+    }
+
+    pub fn on_frame(&mut self, msg: RtmpMessage) -> Result<(), StreamError> {
+        for (_, comsumer) in self.comsumers.iter() {
+            if let Err(e) = comsumer.send(msg.clone()) {
+                warn!("Hub send to comsumer failed: {:?}", e);
+            }
+        }
+        Ok(())
     }
 }

@@ -15,4 +15,7 @@ pub enum ServiceError {
 
     #[error("The token is invalid")]
     InvalidToken,
+
+    #[error("Publish is done")]
+    PublishDone,
 }

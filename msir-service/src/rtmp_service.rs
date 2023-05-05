@@ -114,7 +114,38 @@ impl RtmpService {
     }
 
     async fn playing(&mut self, req: &Request, token: Token) -> Result<(), ServiceError> {
-        Ok(())
+        let mut rx = match token {
+            Token::ComsumerToken(rx) => rx,
+            _ => return Err(ServiceError::InvalidToken),
+        };
+        loop {
+            tokio::select! {
+                msg = self.rtmp.recv_message() => {
+                    match msg {
+                        Ok(msg) => {
+                            match msg {
+                                RtmpMessage::Amf0Command {command_name, .. } => {
+                                    info!("Server receive Amf0Command: {:?}", command_name);
+                                }
+                                RtmpMessage::Amf0Data { values } => {
+                                    info!("Server receive Amf0Data: {:?}", values);
+                                }
+                                RtmpMessage::VideoData {..} => {}
+                                RtmpMessage::AudioData {..} => {}
+                                other => info!("Server ignore msg {:?}", other)
+                            }
+                        }
+                        Err(err) => return Err(ServiceError::ConnectionError(err)),
+                    }
+                }
+                msg = rx.recv() => {
+                    match msg {
+                        Some(msg) => self.rtmp.send_message(msg, 0, 0).await?,
+                        None => return Err(ServiceError::PublishDone)
+                    }
+                }
+            }
+        }
     }
 
     async fn publishing(&mut self, req: &Request, token: Token) -> Result<(), ServiceError> {
@@ -134,8 +165,8 @@ impl RtmpService {
                                 RtmpMessage::Amf0Data { values } => {
                                     info!("Server receive Amf0Data: {:?}", values);
                                 }
-                                RtmpMessage::VideoData {..} => {}
-                                RtmpMessage::AudioData {..} => {}
+                                RtmpMessage::VideoData {..} => hub.on_frame(msg)?,
+                                RtmpMessage::AudioData {..} => hub.on_frame(msg)?,
                                 other => info!("Server ignore msg {:?}", other)
                             }
                         }
