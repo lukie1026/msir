@@ -9,6 +9,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 pub mod error;
+pub mod gop;
 pub mod hub;
 
 #[derive(Debug)]

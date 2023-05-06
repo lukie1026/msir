@@ -1,5 +1,3 @@
-use crate::chunk::MessageHeader;
-
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{Buf, Bytes};
 use error::{MessageDecodeError, MessageEncodeError};
@@ -36,7 +34,7 @@ pub enum RtmpMessage {
     },
     Amf0Data {
         // packet: packet::Amf0DataPacket,
-        // FIXME: need to add command_name?
+        command_name: String,
         values: Vec<Amf0Value>,
     },
     UserControl {
@@ -77,24 +75,6 @@ pub enum RtmpMessage {
         data: Bytes,
     },
 }
-
-// impl Clone for RtmpMessage {
-//     fn clone(&self) -> Self {
-//         match self {
-//             Self::Amf0Command { command_name, transaction_id, command_object, additional_arguments } => Self::Amf0Command { command_name: command_name.clone(), transaction_id: transaction_id.clone(), command_object: command_object.clone(), additional_arguments: additional_arguments.clone() },
-//             Self::Amf0Data { values } => Self::Amf0Data { values: values.clone() },
-//             Self::UserControl { event_type, event_data, extra_data } => Self::UserControl { event_type: event_type.clone(), event_data: event_data.clone(), extra_data: extra_data.clone() },
-//             Self::SetWindowAckSize { ack_window_size } => Self::SetWindowAckSize { ack_window_size: ack_window_size.clone() },
-//             Self::Acknowledgement { sequence_number } => Self::Acknowledgement { sequence_number: sequence_number.clone() },
-//             Self::SetChunkSize { chunk_size } => Self::SetChunkSize { chunk_size: chunk_size.clone() },
-//             Self::AudioData { stream_id, timestamp, payload } => Self::AudioData { stream_id: stream_id.clone(), timestamp: timestamp.clone(), payload: payload.clone() },
-//             Self::VideoData { stream_id, timestamp, payload } => Self::VideoData { stream_id: stream_id.clone(), timestamp: timestamp.clone(), payload: payload.clone() },
-//             Self::Abort { stream_id } => Self::Abort { stream_id: stream_id.clone() },
-//             Self::SetPeerBandwidth { size, limit_type } => Self::SetPeerBandwidth { size: size.clone(), limit_type: limit_type.clone() },
-//             Self::Unknown { type_id, data } => Self::Unknown { type_id: type_id.clone(), data: data.clone() },
-//         }
-//     }
-// }
 
 impl RtmpMessage {
     pub fn new_null(transaction_id: f64) -> Self {
@@ -139,11 +119,8 @@ impl RtmpMessage {
     }
     pub fn new_sample_access() -> Self {
         return RtmpMessage::Amf0Data {
-            values: vec![
-                Amf0Value::Utf8String(DATA_SAMPLE_ACCESS.to_string()),
-                Amf0Value::Boolean(true),
-                Amf0Value::Boolean(true),
-            ],
+            command_name: DATA_SAMPLE_ACCESS.to_string(),
+            values: vec![Amf0Value::Boolean(true), Amf0Value::Boolean(true)],
         };
     }
     pub fn new_on_fcpublish() -> Self {
@@ -242,13 +219,11 @@ impl RtmpMessage {
     }
     pub fn new_on_status_data_start() -> Self {
         return RtmpMessage::Amf0Data {
-            values: vec![
-                Amf0Value::Utf8String(COMMAND_ON_STATUS.to_string()),
-                fast_create_amf0_obj(vec![(
-                    STATUS_CODE,
-                    Amf0Value::Utf8String(STATUS_CODE_DATA_START.to_string()),
-                )]),
-            ],
+            command_name: COMMAND_ON_STATUS.to_string(),
+            values: vec![fast_create_amf0_obj(vec![(
+                STATUS_CODE,
+                Amf0Value::Utf8String(STATUS_CODE_DATA_START.to_string()),
+            )])],
         };
     }
     pub fn new_connect_app_res(object_encoding: f64) -> Self {
@@ -288,7 +263,6 @@ impl RtmpMessage {
         };
     }
 
-    // FIXME: need to judge Amf0Data?
     pub fn expect_amf(&self, specified_cmds: &[&str]) -> bool {
         let all_cmds = specified_cmds.len() == 0;
         if let RtmpMessage::Amf0Command { command_name, .. } = self {
@@ -299,6 +273,15 @@ impl RtmpMessage {
                 if command_name == *cmd {
                     return true;
                 }
+            }
+        }
+        return false;
+    }
+
+    pub fn is_metadata(&self) -> bool {
+        if let RtmpMessage::Amf0Data { command_name, .. } = self {
+            if command_name == DATA_ON_METADATA {
+                return true;
             }
         }
         return false;
@@ -386,7 +369,25 @@ pub fn decode(payload: RtmpPayload) -> Result<RtmpMessage, MessageDecodeError> {
             let mut cursor = Cursor::new(payload.raw_data);
             let values = rml_amf0::deserialize(&mut cursor)?;
 
-            return Ok(RtmpMessage::Amf0Data { values });
+            let cmd = match &values[0] {
+                Amf0Value::Utf8String(value) => value,
+                _ => return Err(MessageDecodeError::InvalidFormat("command".to_string())),
+            };
+            if cmd == DATA_SET_DATAFRAME {
+                let cmd = match &values[1] {
+                    Amf0Value::Utf8String(value) => value,
+                    _ => return Err(MessageDecodeError::InvalidFormat("command".to_string())),
+                };
+                return Ok(RtmpMessage::Amf0Data {
+                    command_name: cmd.to_string(),
+                    values: values[2..].to_vec(),
+                });
+            } else {
+                return Ok(RtmpMessage::Amf0Data {
+                    command_name: cmd.to_string(),
+                    values: values[1..].to_vec(),
+                });
+            }
         }
         msg_type::AMF3_CMD | msg_type::AMF0_CMD => {
             trace!("Recv message <amf_cmd>");
@@ -473,8 +474,17 @@ pub fn encode(
                 raw_data: Bytes::from(bytes),
             })
         }
-        RtmpMessage::Amf0Data { values } => {
-            let bytes = rml_amf0::serialize(&values)?;
+        RtmpMessage::Amf0Data {
+            command_name,
+            mut values,
+        } => {
+            let cmd = match command_name.is_empty() {
+                true => Amf0Value::Null,
+                false => Amf0Value::Utf8String(command_name),
+            };
+            let mut array = vec![cmd];
+            array.append(&mut values);
+            let bytes = rml_amf0::serialize(&array)?;
 
             Ok(RtmpPayload {
                 message_type: msg_type::AMF0_DATA,

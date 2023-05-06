@@ -55,6 +55,8 @@ pub mod amf0_command_type {
     pub const COMMAND_ON_FC_PUBLISH: &str = "onFCPublish";
     pub const COMMAND_ON_FC_UNPUBLISH: &str = "onFCUnpublish";
     pub const DATA_SAMPLE_ACCESS: &str = "|RtmpSampleAccess";
+    pub const DATA_ON_METADATA: &str = "onMetaData";
+    pub const DATA_SET_DATAFRAME: &str = "@setDataFrame";
 }
 
 pub mod rtmp_sig {

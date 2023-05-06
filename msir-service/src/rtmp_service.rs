@@ -127,8 +127,8 @@ impl RtmpService {
                                 RtmpMessage::Amf0Command {command_name, .. } => {
                                     info!("Server receive Amf0Command: {:?}", command_name);
                                 }
-                                RtmpMessage::Amf0Data { values } => {
-                                    info!("Server receive Amf0Data: {:?}", values);
+                                RtmpMessage::Amf0Data { command_name, values } => {
+                                    info!("Server receive Amf0Data: {:?} {:?}", command_name, values);
                                 }
                                 RtmpMessage::VideoData {..} => {}
                                 RtmpMessage::AudioData {..} => {}
@@ -162,8 +162,11 @@ impl RtmpService {
                                 RtmpMessage::Amf0Command {command_name, .. } => {
                                     info!("Server receive Amf0Command: {:?}", command_name);
                                 }
-                                RtmpMessage::Amf0Data { values } => {
-                                    info!("Server receive Amf0Data: {:?}", values);
+                                RtmpMessage::Amf0Data { .. } => {
+                                    info!("Server receive Amf0Data: {:?}", msg);
+                                    if msg.is_metadata() {
+                                        hub.on_metadata(msg)?;
+                                    }
                                 }
                                 RtmpMessage::VideoData {..} => hub.on_frame(msg)?,
                                 RtmpMessage::AudioData {..} => hub.on_frame(msg)?,

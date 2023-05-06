@@ -1,7 +1,9 @@
 use rtmp::message::RtmpMessage;
 
+#[derive(Debug)]
 pub struct GopCache {
-    caches: Vec<RtmpMessage>,
+    // TODO: implement iter
+    pub caches: Vec<RtmpMessage>,
     max_frame: u32,
 }
 
@@ -13,5 +15,7 @@ impl GopCache {
         }
     }
 
-    pub fn cache(msg: RtmpMessage) {}
+    pub fn cache(&mut self, msg: RtmpMessage) {
+        self.caches.push(msg);
+    }
 }
