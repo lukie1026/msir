@@ -158,12 +158,24 @@ impl ChunkCodec {
                 let length = cmp::min(total - sent, self.out_chunk_size);
                 let (s, e) = self.add_chunk_header(msg, sent == 0, init)?;
                 let mut write_array: Vec<IoSlice> = Vec::with_capacity(2);
-                {
-                    write_array.push(IoSlice::new(&self.chunk_header_cache[s..e]));
-                    write_array.push(IoSlice::new(&msg.raw_data[sent..(sent + length)]));
+                let chunk_length = (e - s) + length;
+                let mut ret = 0_usize;
+                loop {
+                    if ret < chunk_length {
+                        write_array.clear();
+                        if ret >= (e - s) {
+                            write_array.push(IoSlice::new(
+                                &msg.raw_data[(sent + (ret - (e - s)))..(sent + length)],
+                            ));
+                        } else {
+                            write_array.push(IoSlice::new(&self.chunk_header_cache[(s + ret)..e]));
+                            write_array.push(IoSlice::new(&msg.raw_data[sent..(sent + length)]));
+                        }
+                    } else {
+                        break;
+                    }
+                    ret += self.io.write_vectored(&write_array).await?;
                 }
-                trace!("Lukie write vectored len {}", write_array.len());
-                self.io.write_vectored(&write_array).await?;
 
                 init = false;
                 sent += length;
