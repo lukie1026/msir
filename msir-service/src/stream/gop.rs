@@ -13,10 +13,10 @@ pub struct GopCache {
 impl GopCache {
     pub fn new() -> Self {
         Self {
-            max_frame: 128,
+            max_frame: 2048,
             cached_video: false,
             continuous_audio_count: 0,
-            caches: Vec::with_capacity(128),
+            caches: Vec::with_capacity(2048),
         }
     }
 
@@ -37,9 +37,16 @@ impl GopCache {
             self.continuous_audio_count += 1;
         }
         if self.continuous_audio_count > 100 {
+            warn!("Clear gop cache for guess pure audio overflow");
+            self.clear();
             return;
         }
         if self.caches.len() > self.max_frame {
+            warn!(
+                "Clear gop cache for reach the max frames, threshold {}",
+                self.max_frame
+            );
+            self.clear();
             return;
         }
         if is_video && codec::is_video_keyframe(payload) {
