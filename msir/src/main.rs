@@ -30,15 +30,20 @@ use tracing::{debug, error, info, info_span, instrument, trace, Instrument};
 use tracing_subscriber;
 
 use futures::FutureExt;
-use std::env;
 use std::error::Error;
+use std::{env, io};
+use uuid::Uuid;
 
-#[tokio::main(worker_threads = 2)]
+#[tokio::main(worker_threads = 8)]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let file_appender = tracing_appender::rolling::never("/tmp", "tracing.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
     tracing_subscriber::fmt()
-        // enable everything
         .with_max_level(tracing::Level::INFO)
-        // sets this to be the default, global collector for this application.
+        .with_writer(io::stdout)
+        .with_writer(non_blocking) // write to file
+        .with_ansi(false) // disable color if write to file
         .init();
 
     let (tx, rx) = mpsc::unbounded_channel::<StreamEvent>();
@@ -58,13 +63,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind(listen_addr).await?;
 
     while let Ok((inbound, _)) = listener.accept().await {
-        let rtmp_service = rtmp_service(inbound, tx.clone()).map(|r| {
+        let uid = Uuid::new_v4();
+        let rtmp_service = rtmp_service(inbound, uid, tx.clone()).map(|r| {
             if let Err(e) = r {
                 error!("Failed to transfer; error={}", e);
             }
         });
 
-        tokio::spawn(rtmp_service.instrument(tracing::info_span!("RTMP-CONN")));
+        tokio::spawn(
+            rtmp_service.instrument(tracing::info_span!("RTMP-CONN", uid = uid.to_string())),
+        );
     }
 
     Ok(())
@@ -80,8 +88,9 @@ async fn resource_manager_start(
 // #[instrument]
 async fn rtmp_service(
     inbound: TcpStream,
+    uid: Uuid,
     tx: mpsc::UnboundedSender<StreamEvent>,
 ) -> Result<(), Box<dyn Error>> {
-    RtmpService::new(inbound).await?.run(tx).await?;
+    RtmpService::new(inbound, Some(uid)).await?.run(tx).await?;
     Ok(())
 }
