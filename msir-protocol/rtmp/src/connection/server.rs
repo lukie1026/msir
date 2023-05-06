@@ -1,7 +1,6 @@
 use rml_amf0::Amf0Value;
-use std::collections::HashMap;
-use tokio::{net::TcpStream, stream};
-use tracing::{info, warn};
+use tokio::net::TcpStream;
+use tracing::{info, trace, warn};
 
 use crate::{
     handshake,
@@ -38,7 +37,7 @@ impl Server {
         timestamp: u32,
         csid: u32,
     ) -> Result<(), ConnectionError> {
-        info!("Server response: {:?}", msg);
+        trace!("Server response: {}", msg);
         self.ctx.send_message(msg, timestamp, csid).await
     }
     pub async fn identify_client(&mut self) -> Result<Request, ConnectionError> {

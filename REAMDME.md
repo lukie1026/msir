@@ -6,6 +6,9 @@
 ## Protocol/rtmp-handshake
 - [ ] complex handshake
 
+## Protocol/rtmp-codec
+- [ ] improvement
+
 ## Protocol/rtmp-server
 - [ ] redirect
 - [ ] on_play_client_pause

@@ -55,7 +55,7 @@ impl RtmpService {
             true => self.publishing(&req, token).await,
             false => self.playing(&req, token).await,
         };
-        info!("Unegister {:?} succeed", self.uid);
+        info!("Unegister {:?} {:?} succeed", self.uid, req.conn_type);
         self.unregister(&mgr_tx, &req).await;
         return ret;
     }
@@ -124,14 +124,15 @@ impl RtmpService {
                     match msg {
                         Ok(msg) => {
                             match msg {
-                                RtmpMessage::Amf0Command {command_name, .. } => {
-                                    info!("Server receive Amf0Command: {:?}", command_name);
+                                RtmpMessage::Amf0Command { .. } => {
+                                    info!("Server receive: {}", msg);
                                 }
-                                RtmpMessage::Amf0Data { command_name, values } => {
-                                    info!("Server receive Amf0Data: {:?} {:?}", command_name, values);
+                                RtmpMessage::Amf0Data { .. } => {
+                                    info!("Server receive: {}", msg);
                                 }
                                 RtmpMessage::VideoData {..} => {}
                                 RtmpMessage::AudioData {..} => {}
+                                RtmpMessage::Acknowledgement { .. } => {} // Do not trace
                                 other => info!("Server ignore msg {:?}", other)
                             }
                         }
@@ -159,17 +160,18 @@ impl RtmpService {
                     match msg {
                         Ok(msg) => {
                             match msg {
-                                RtmpMessage::Amf0Command {command_name, .. } => {
-                                    info!("Server receive Amf0Command: {:?}", command_name);
+                                RtmpMessage::Amf0Command { .. } => {
+                                    info!("Server receive: {}", msg);
                                 }
                                 RtmpMessage::Amf0Data { .. } => {
-                                    info!("Server receive Amf0Data: {:?}", msg);
+                                    info!("Server receive: {}", msg);
                                     if msg.is_metadata() {
                                         hub.on_metadata(msg)?;
                                     }
                                 }
                                 RtmpMessage::VideoData {..} => hub.on_frame(msg)?,
                                 RtmpMessage::AudioData {..} => hub.on_frame(msg)?,
+                                RtmpMessage::Acknowledgement { .. } => {} // Do not trace
                                 other => info!("Server ignore msg {:?}", other)
                             }
                         }

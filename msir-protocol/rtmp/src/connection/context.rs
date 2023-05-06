@@ -147,7 +147,7 @@ impl Context {
             if msg.expect_amf(specified_cmds) {
                 return Ok(msg);
             }
-            info!("Server ignore msg: {:?}", msg);
+            info!("Server ignore msg: {}", msg);
         }
     }
     // pub async fn expect_result_or_error(&mut self, transcation_id: f64) -> Result<RtmpMessage, ConnectionError> {

@@ -378,74 +378,6 @@ impl ChunkCodec {
             Err(e) => Err(e),
         }
     }
-
-    // FIXME: test
-    pub fn handle_connect(&mut self, msg: RtmpMessage) -> (String, bool) {
-        match msg {
-            RtmpMessage::Amf0Command {
-                command_name,
-                command_object,
-                transaction_id,
-                additional_arguments,
-            } => {
-                if command_name != crate::message::types::amf0_command_type::COMMAND_CONNECT {
-                    return ("notfound1".to_string(), false);
-                }
-                let mut properties = match command_object {
-                    Amf0Value::Object(properties) => properties,
-                    _ => return ("invalid".to_string(), false),
-                };
-
-                let app_name = match properties.remove("app") {
-                    Some(value) => match value {
-                        Amf0Value::Utf8String(mut app) => {
-                            if app.ends_with("/") {
-                                app.pop();
-                            }
-
-                            return (app, true);
-                        }
-                        _ => return ("invalid2".to_string(), false),
-                    },
-                    None => return ("invalid3".to_string(), false),
-                };
-            }
-            _ => ("notfound2".to_string(), false),
-        }
-    }
-
-    // FIXME: test
-    pub async fn relay_connect(&mut self, app: String) -> Result<()> {
-        let mut command_object_properties = HashMap::new();
-        command_object_properties.insert(
-            "fmsVer".to_string(),
-            Amf0Value::Utf8String("FMS/3,0,1,1233".to_string()),
-        );
-        command_object_properties.insert("capabilities".to_string(), Amf0Value::Number(31.0));
-
-        let description = "Successfully connected on app: ".to_string() + &app;
-        let mut additional_properties = create_status_object(
-            "status",
-            "NetConnection.Connect.Success",
-            description.as_ref(),
-        );
-        additional_properties.insert("objectEncoding".to_string(), Amf0Value::Number(0.0));
-
-        let message = RtmpMessage::Amf0Command {
-            command_name: "_result".to_string(),
-            transaction_id: 1.0,
-            command_object: Amf0Value::Object(command_object_properties),
-            additional_arguments: vec![Amf0Value::Object(additional_properties)],
-        };
-
-        let payload = encode(message, 0, 0)?;
-        // let payload = message.into_message_payload(self.get_epoch(), 0)?;
-        // let packet = self.serializer.serialize(&payload, false, false)?;
-
-        // Ok(vec![ServerSessionResult::OutboundResponse(packet)])
-
-        self.send_rtmp_message(payload).await
-    }
 }
 
 fn get_perfer_cid(typ: u8) -> u32 {
@@ -460,19 +392,4 @@ fn get_perfer_cid(typ: u8) -> u32 {
         VIDEO => RTMP_CID_VIDEO,
         _ => RTMP_CID_PROTOCOL_CONTROL,
     }
-}
-
-// FIXME: test
-fn create_status_object(level: &str, code: &str, description: &str) -> HashMap<String, Amf0Value> {
-    let mut properties = HashMap::new();
-    properties.insert(
-        "level".to_string(),
-        Amf0Value::Utf8String(level.to_string()),
-    );
-    properties.insert("code".to_string(), Amf0Value::Utf8String(code.to_string()));
-    properties.insert(
-        "description".to_string(),
-        Amf0Value::Utf8String(description.to_string()),
-    );
-    properties
 }

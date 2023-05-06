@@ -4,9 +4,9 @@ use error::{MessageDecodeError, MessageEncodeError};
 use rml_amf0;
 use rml_amf0::Amf0Value;
 
-use std::{collections::HashMap, io::Cursor};
+use std::{collections::HashMap, fmt, io::Cursor};
 
-use tracing::{error, info, info_span, instrument, trace};
+use tracing::{error, event, info, info_span, instrument, trace};
 
 use self::types::{amf0_command_type::*, rtmp_sig::*, rtmp_status::*, *};
 
@@ -285,6 +285,93 @@ impl RtmpMessage {
             }
         }
         return false;
+    }
+}
+
+impl fmt::Display for RtmpMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RtmpMessage::Amf0Command {
+                command_name,
+                transaction_id,
+                ..
+            } => {
+                write!(
+                    f,
+                    "AmfCmd [tid:{}] {{ cmd: {}}}",
+                    transaction_id, command_name
+                )
+            }
+            RtmpMessage::Amf0Data {
+                command_name,
+                values,
+            } => {
+                write!(f, "AmfData {{ cmd: {}, {:?}}}", command_name, values)
+            }
+            RtmpMessage::UserControl {
+                event_type,
+                event_data,
+                extra_data,
+            } => {
+                write!(
+                    f,
+                    "UserControl {{ type: {}, data: {}, extra: {}}}",
+                    event_type, event_data, extra_data
+                )
+            }
+            RtmpMessage::SetWindowAckSize { ack_window_size } => {
+                write!(f, "SetWindowAckSize {{ ack_win_size: {}}}", ack_window_size)
+            }
+            RtmpMessage::Acknowledgement { sequence_number } => {
+                write!(
+                    f,
+                    "Acknowledgement {{ sequence_number: {}}}",
+                    sequence_number
+                )
+            }
+            RtmpMessage::SetChunkSize { chunk_size } => {
+                write!(f, "SetChunkSize {{ chunk_size: {}}}", chunk_size)
+            }
+            RtmpMessage::AudioData {
+                stream_id,
+                timestamp,
+                payload,
+            } => {
+                write!(
+                    f,
+                    "Audio [sid:{}] {{ timestamp: {}, length: {}}}",
+                    stream_id,
+                    timestamp,
+                    payload.len()
+                )
+            }
+            RtmpMessage::VideoData {
+                stream_id,
+                timestamp,
+                payload,
+            } => {
+                write!(
+                    f,
+                    "Video [sid:{}] {{ timestamp: {}, length: {}}}",
+                    stream_id,
+                    timestamp,
+                    payload.len()
+                )
+            }
+            RtmpMessage::Abort { stream_id } => {
+                write!(f, "Abort {{ stream_id: {}}}", stream_id)
+            }
+            RtmpMessage::SetPeerBandwidth { size, limit_type } => {
+                write!(
+                    f,
+                    "SetPeerBandwidth {{ size: {}, limit: {}}}",
+                    size, limit_type
+                )
+            }
+            RtmpMessage::Unknown { type_id, data } => {
+                write!(f, "Unknow {{ type: {}, length: {}}}", type_id, data.len())
+            }
+        }
     }
 }
 

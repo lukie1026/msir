@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rtmp::message::RtmpMessage;
+use rtmp::{codec, message::RtmpMessage};
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -12,9 +12,16 @@ pub enum HubEvent {
     ComsumerLeave(Uuid),
 }
 
+#[derive(Debug, Default)]
+struct MetaCache {
+    metadata: Option<RtmpMessage>,
+    video_sh: Option<RtmpMessage>,
+    audio_sh: Option<RtmpMessage>,
+}
+
 #[derive(Debug)]
 pub struct Hub {
-    pub metadata: Option<RtmpMessage>,
+    meta: MetaCache,
     pub gop: GopCache,
     pub receiver: mpsc::UnboundedReceiver<HubEvent>,
     pub comsumers: HashMap<Uuid, mpsc::UnboundedSender<RtmpMessage>>,
@@ -23,8 +30,8 @@ pub struct Hub {
 impl Hub {
     pub fn new(rx: mpsc::UnboundedReceiver<HubEvent>) -> Self {
         Self {
-            metadata: None,
             gop: GopCache::new(),
+            meta: MetaCache::default(),
             receiver: rx,
             comsumers: HashMap::new(),
         }
@@ -36,9 +43,21 @@ impl Hub {
                 match ev {
                     HubEvent::ComsumerJoin(uid, tx) => {
                         // send metadata
-                        if let Some(meta) = &self.metadata {
+                        if let Some(meta) = &self.meta.metadata {
                             if let Err(e) = tx.send(meta.clone()) {
                                 warn!("Hub send metadata to comsumer failed: {:?}", e);
+                            }
+                        }
+                        // send audio sequence heade
+                        if let Some(meta) = &self.meta.audio_sh {
+                            if let Err(e) = tx.send(meta.clone()) {
+                                warn!("Hub send audio sh to comsumer failed: {:?}", e);
+                            }
+                        }
+                        // send video sequence heade
+                        if let Some(meta) = &self.meta.video_sh {
+                            if let Err(e) = tx.send(meta.clone()) {
+                                warn!("Hub send video sh to comsumer failed: {:?}", e);
                             }
                         }
                         // send gopcache
@@ -58,7 +77,7 @@ impl Hub {
     }
 
     pub fn on_metadata(&mut self, msg: RtmpMessage) -> Result<(), StreamError> {
-        self.metadata = Some(msg.clone());
+        self.meta.metadata = Some(msg.clone());
         for (_, comsumer) in self.comsumers.iter() {
             if let Err(e) = comsumer.send(msg.clone()) {
                 warn!("Hub send metadata to comsumer failed: {:?}", e);
@@ -73,6 +92,23 @@ impl Hub {
                 warn!("Hub send avdata to comsumer failed: {:?}", e);
             }
         }
+
+        match &msg {
+            RtmpMessage::AudioData { payload, .. } => {
+                if codec::is_audio_sequence_header(payload) {
+                    self.meta.audio_sh = Some(msg);
+                    return Ok(());
+                }
+            }
+            RtmpMessage::VideoData { payload, .. } => {
+                if codec::is_video_sequence_header(payload) {
+                    self.meta.video_sh = Some(msg);
+                    return Ok(());
+                }
+            }
+            _ => {}
+        }
+
         self.gop.cache(msg);
         Ok(())
     }
