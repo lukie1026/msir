@@ -286,6 +286,22 @@ impl RtmpMessage {
         }
         return false;
     }
+
+    pub fn len(&self) -> Option<usize> {
+        match self {
+            RtmpMessage::VideoData { payload, .. } => Some(payload.len()),
+            RtmpMessage::AudioData { payload, .. } => Some(payload.len()),
+            _ => None,
+        }
+    }
+
+    pub fn timestamp(&self) -> Option<u32> {
+        match self {
+            RtmpMessage::VideoData { timestamp, .. } => Some(*timestamp),
+            RtmpMessage::AudioData { timestamp, .. } => Some(*timestamp),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for RtmpMessage {

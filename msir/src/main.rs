@@ -109,9 +109,9 @@ async fn proc_stat() {
         let curr = procfs::process::Process::myself().unwrap().stat().unwrap();
         let memory = curr.rss * procfs::page_size();
         if let Some(last) = last_stat {
-            let cpu = 100 * (curr.utime + curr.stime - last.utime - last.stime)
-                / intval
-                / procfs::ticks_per_second();
+            let cpu = (100 * (curr.utime + curr.stime - last.utime - last.stime)) as f32
+                / intval as f32
+                / procfs::ticks_per_second() as f32;
             info!("CPU {}% MEM {}MB", cpu, memory / 1024 / 1024);
         }
 

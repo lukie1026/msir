@@ -40,6 +40,14 @@ impl Server {
         trace!("Server response: {}", msg);
         self.ctx.send_message(msg, timestamp, csid).await
     }
+    pub async fn send_messages(
+        &mut self,
+        msgs: &[RtmpMessage],
+        timestamp: u32,
+        csid: u32,
+    ) -> Result<(), ConnectionError> {
+        self.ctx.send_messages(&msgs, timestamp, csid).await
+    }
     pub async fn identify_client(&mut self) -> Result<Request, ConnectionError> {
         let mut req = self.connect_app().await?;
         loop {

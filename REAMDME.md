@@ -32,5 +32,10 @@
 - [ ] set read/write buffer
 - [ ] merge read/write
 
+## Config
+- [ ] chunkIO BufStream 128KB
+- [ ] Merge write 350ms
+
 # BUG
 - [ ] 150路推流，300路拉流的压测场景下，会有概率出现推流断流
+- [ ] merge-write，内存增长问题

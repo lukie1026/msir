@@ -9,7 +9,7 @@ use rtmp::message::RtmpMessage;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 pub struct RtmpService {
@@ -118,6 +118,9 @@ impl RtmpService {
             Token::ComsumerToken(rx) => rx,
             _ => return Err(ServiceError::InvalidToken),
         };
+        let mut msgs = Vec::with_capacity(128);
+        let mut cache_size = 0;
+        let mut start_ts = 0;
         loop {
             tokio::select! {
                 msg = self.rtmp.recv_message() => {
@@ -141,7 +144,20 @@ impl RtmpService {
                 }
                 msg = rx.recv() => {
                     match msg {
-                        Some(msg) => self.rtmp.send_message(msg, 0, 0).await?,
+                        Some(msg) => {
+                            let cur_ts = msg.timestamp().unwrap_or(0);
+                            cache_size += msg.len().unwrap_or(0);
+                            msgs.push(msg);
+                            // Merge msgs in 350ms for performance, but will be harmful to latency
+                            // TODO: rasie the priority of I frame
+                            if cur_ts >= (start_ts + 350) || cur_ts == 0 {
+                                debug!("Merged send msgs len {} total-size {}", msgs.len(), cache_size);
+                                self.rtmp.send_messages(&msgs, 0, 0).await?;
+                                msgs.clear();
+                                start_ts = cur_ts;
+                                cache_size = 0;
+                            }
+                        }
                         None => return Err(ServiceError::PublishDone)
                     }
                 }
