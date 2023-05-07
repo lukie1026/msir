@@ -31,10 +31,12 @@ use tracing_subscriber;
 
 use futures::FutureExt;
 use std::error::Error;
+use std::time::Duration;
 use std::{env, io};
 use uuid::Uuid;
 
-#[tokio::main(worker_threads = 8)]
+//#[tokio::main(worker_threads = 8)]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
     let file_appender = tracing_appender::rolling::never("/tmp", "tracing.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
@@ -53,6 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
     tokio::spawn(res_mgr.instrument(tracing::info_span!("RES-MGR")));
+    tokio::spawn(proc_stat());
 
     let listen_addr = env::args()
         .nth(1)
@@ -94,3 +97,27 @@ async fn rtmp_service(
     RtmpService::new(inbound, Some(uid)).await?.run(tx).await?;
     Ok(())
 }
+
+#[cfg(target_os = "linux")]
+async fn proc_stat() {
+    use procfs::process::Stat;
+    let intval = 5;
+    let mut interval = tokio::time::interval(Duration::from_secs(intval));
+    let mut last_stat: Option<Stat> = None;
+    loop {
+        interval.tick().await;
+        let curr = procfs::process::Process::myself().unwrap().stat().unwrap();
+        let memory = curr.rss * procfs::page_size();
+        if let Some(last) = last_stat {
+            let cpu = 100 * (curr.utime + curr.stime - last.utime - last.stime)
+                / intval
+                / procfs::ticks_per_second();
+            info!("CPU {}% MEM {}MB", cpu, memory / 1024 / 1024);
+        }
+
+        last_stat = Some(curr);
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn proc_stat() {}
