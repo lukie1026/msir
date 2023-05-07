@@ -6,14 +6,13 @@ use std::{
 
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{Buf, Bytes, BytesMut};
-use rml_amf0::Amf0Value;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWriteExt, BufStream},
     net::TcpStream,
 };
 use tracing::{error, info, instrument, trace, warn};
 
-use crate::message::{decode, encode, types::msg_type::*, RtmpMessage, RtmpPayload};
+use crate::message::{decode, types::msg_type::*, RtmpMessage, RtmpPayload};
 
 use self::error::ChunkError;
 
@@ -100,7 +99,8 @@ impl ChunkStream {
 }
 
 pub struct ChunkCodec {
-    io: TcpStream,
+    // use BufStream to improve io performance
+    io: BufStream<TcpStream>,
     in_chunk_size: usize,
     out_chunk_size: usize,
     chunk_streams: HashMap<u32, ChunkStream>,
@@ -110,7 +110,7 @@ pub struct ChunkCodec {
 impl ChunkCodec {
     pub fn new(io: TcpStream) -> Self {
         Self {
-            io,
+            io: BufStream::with_capacity(131072, 0, io),
             in_chunk_size: 128,
             out_chunk_size: 128,
             chunk_streams: HashMap::new(),

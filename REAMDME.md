@@ -31,3 +31,6 @@
 - [ ] stats: kbps, bytes
 - [ ] set read/write buffer
 - [ ] merge read/write
+
+# BUG
+- [ ] 150路推流，300路拉流的压测场景下，会有概率出现推流断流
