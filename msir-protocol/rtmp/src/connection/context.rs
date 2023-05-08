@@ -1,5 +1,5 @@
 use crate::{
-    chunk::{ChunkCodec, ChunkStream},
+    chunk::ChunkCodec,
     message::{types::*, RtmpMessage},
 };
 
@@ -17,21 +17,10 @@ struct AckWindowSize {
 }
 
 pub struct Context {
-    // For peer in/out
     chunk_io: ChunkCodec,
-    // requests: HashMap<f64, String>,
-    // For peer in
-    chunk_streams: HashMap<u32, ChunkStream>, // TODO: Performance
     in_ack_size: AckWindowSize,
     out_ack_size: AckWindowSize,
     in_buffer_length: u32,
-    in_chunk_size: u32,
-    // For peer out
-    // out_c0c3_caches: BytesMut,  // TODO: Performance
-    // Whether warned user to increase the c0c3 header cache.
-    // warned_c0c3_cache_dry: bool,
-    // The output chunk size, default to 128, set by config.
-    out_chunk_size: u32,
 }
 
 impl Context {
@@ -39,12 +28,9 @@ impl Context {
         Self {
             chunk_io: ChunkCodec::new(io),
             // requests: HashMap::new(),
-            chunk_streams: HashMap::new(),
             in_ack_size: AckWindowSize::default(),
             out_ack_size: AckWindowSize::default(),
             in_buffer_length: 0,
-            in_chunk_size: 128,
-            out_chunk_size: 128,
         }
     }
 

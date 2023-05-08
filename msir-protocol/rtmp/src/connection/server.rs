@@ -7,8 +7,8 @@ use crate::{
     message::{
         request::Request,
         types::{
-            amf0_command_type::*, peer_bw_limit_type, rtmp_sig::*,
-            user_ctrl_ev_type::*, DEFAULT_SID,
+            amf0_command_type::*, peer_bw_limit_type, rtmp_sig::*, user_ctrl_ev_type::*,
+            DEFAULT_SID,
         },
         RtmpMessage,
     },

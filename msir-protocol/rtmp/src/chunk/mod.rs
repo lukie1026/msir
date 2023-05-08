@@ -74,13 +74,13 @@ impl Default for MessageHeader {
 }
 
 #[derive(Debug)]
-pub struct ChunkStream {
-    pub fmt: u8,
-    pub csid: u32,
-    pub header: MessageHeader,
-    pub extended_timestamp: bool,
-    pub payload: BytesMut,
-    pub msg_count: u32,
+struct ChunkStream {
+    fmt: u8,
+    csid: u32,
+    header: MessageHeader,
+    extended_timestamp: bool,
+    payload: BytesMut,
+    msg_count: u32,
 }
 
 impl ChunkStream {
@@ -103,7 +103,7 @@ pub struct ChunkCodec {
     io: BufStream<TcpStream>,
     in_chunk_size: usize,
     out_chunk_size: usize,
-    chunk_streams: HashMap<u32, ChunkStream>,
+    chunk_streams: HashMap<u32, ChunkStream>, // TODO: Performance
     chunk_header_cache: Vec<u8>,
 }
 
