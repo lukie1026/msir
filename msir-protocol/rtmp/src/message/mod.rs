@@ -140,6 +140,23 @@ impl RtmpMessage {
             ])],
         };
     }
+    pub fn new_on_fcunpublish() -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_ON_FC_UNPUBLISH.to_string(),
+            transaction_id: 0.0,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![fast_create_amf0_obj(vec![
+                (
+                    STATUS_CODE,
+                    Amf0Value::Utf8String(STATUS_CODE_UNPUBLISH_SUCCESS.to_string()),
+                ),
+                (
+                    STATUS_DESCRIPTION,
+                    Amf0Value::Utf8String("Stop publishing stream.".to_string()),
+                ),
+            ])],
+        };
+    }
     pub fn new_on_status_publish_start() -> Self {
         return RtmpMessage::Amf0Command {
             command_name: COMMAND_ON_STATUS.to_string(),
@@ -157,6 +174,31 @@ impl RtmpMessage {
                 (
                     STATUS_DESCRIPTION,
                     Amf0Value::Utf8String("Started publishing stream.".to_string()),
+                ),
+                (
+                    STATUS_CLIENT_ID,
+                    Amf0Value::Utf8String(RTMP_SIG_CLIENT_ID.to_string()),
+                ),
+            ])],
+        };
+    }
+    pub fn new_on_status_unpublish() -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_ON_STATUS.to_string(),
+            transaction_id: 0.0,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![fast_create_amf0_obj(vec![
+                (
+                    STATUS_LEVEL,
+                    Amf0Value::Utf8String(STATUS_LEVEL_STATUS.to_string()),
+                ),
+                (
+                    STATUS_CODE,
+                    Amf0Value::Utf8String(STATUS_CODE_UNPUBLISH_SUCCESS.to_string()),
+                ),
+                (
+                    STATUS_DESCRIPTION,
+                    Amf0Value::Utf8String("Stream is now unpublished".to_string()),
                 ),
                 (
                     STATUS_CLIENT_ID,
@@ -213,6 +255,48 @@ impl RtmpMessage {
                 (
                     STATUS_CLIENT_ID,
                     Amf0Value::Utf8String(RTMP_SIG_CLIENT_ID.to_string()),
+                ),
+            ])],
+        };
+    }
+    pub fn new_on_status_pause() -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_ON_STATUS.to_string(),
+            transaction_id: 0.0,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![fast_create_amf0_obj(vec![
+                (
+                    STATUS_LEVEL,
+                    Amf0Value::Utf8String(STATUS_LEVEL_STATUS.to_string()),
+                ),
+                (
+                    STATUS_CODE,
+                    Amf0Value::Utf8String(STATUS_CODE_STREAM_PAUSE.to_string()),
+                ),
+                (
+                    STATUS_DESCRIPTION,
+                    Amf0Value::Utf8String("Paused stream.".to_string()),
+                ),
+            ])],
+        };
+    }
+    pub fn new_on_status_unpause() -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_ON_STATUS.to_string(),
+            transaction_id: 0.0,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![fast_create_amf0_obj(vec![
+                (
+                    STATUS_LEVEL,
+                    Amf0Value::Utf8String(STATUS_LEVEL_STATUS.to_string()),
+                ),
+                (
+                    STATUS_CODE,
+                    Amf0Value::Utf8String(STATUS_CODE_STREAM_UNPAUSE.to_string()),
+                ),
+                (
+                    STATUS_DESCRIPTION,
+                    Amf0Value::Utf8String("Unpaused stream.".to_string()),
                 ),
             ])],
         };

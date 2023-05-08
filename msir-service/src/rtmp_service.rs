@@ -2,8 +2,8 @@ use crate::{
     error::ServiceError,
     stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
 };
-use rtmp::connection::server as rtmp_conn;
 use rtmp::connection::RtmpConnType;
+use rtmp::connection::{server as rtmp_conn, RtmpCtrlAction};
 use rtmp::message::request::Request;
 use rtmp::message::RtmpMessage;
 use tokio::net::TcpStream;
@@ -27,37 +27,45 @@ impl RtmpService {
         &mut self,
         mgr_tx: mpsc::UnboundedSender<StreamEvent>,
     ) -> Result<(), ServiceError> {
-        // connect with client and identify conn type
-        let req = self.rtmp.identify_client().await?;
-        // start publish/play
-        match req.conn_type {
-            RtmpConnType::Play => {
-                info!("Start play...");
-                self.rtmp.start_play().await?;
+        loop {
+            // connect with client and identify conn type
+            let req = self.rtmp.identify_client().await?;
+            // start publish/play
+            match req.conn_type {
+                RtmpConnType::Play => {
+                    info!("Start play...");
+                    self.rtmp.start_play().await?;
+                }
+                RtmpConnType::FmlePublish => {
+                    info!("Start fmle publish...");
+                    self.rtmp.start_fmle_publish().await?;
+                }
+                RtmpConnType::FlashPublish => {
+                    info!("Start flash publish...");
+                    self.rtmp.start_flash_publish().await?;
+                }
+                RtmpConnType::HaivisionPublish => {
+                    info!("Start haivision publish...");
+                    self.rtmp.start_haivision_publish().await?;
+                }
+                _ => {}
             }
-            RtmpConnType::FmlePublish => {
-                info!("Start fmle publish...");
-                self.rtmp.start_fmle_publish().await?;
+            let token = self.register(&mgr_tx, &req).await?;
+            info!("Register {:?} succeed", self.uid);
+            let ret = match req.conn_type.is_publish() {
+                true => self.publishing(&req, token).await,
+                false => self.playing(&req, token).await,
+            };
+            info!("Unegister {:?} {:?} succeed", self.uid, req.conn_type);
+            self.unregister(&mgr_tx, &req).await;
+            match ret? {
+                Some(act) => match act {
+                    RtmpCtrlAction::Republish | RtmpCtrlAction::Close => continue,
+                    _ => return Ok(()),
+                },
+                None => return Ok(()),
             }
-            RtmpConnType::FlashPublish => {
-                info!("Start flash publish...");
-                self.rtmp.start_flash_publish().await?;
-            }
-            RtmpConnType::HaivisionPublish => {
-                info!("Start haivision publish...");
-                self.rtmp.start_haivision_publish().await?;
-            }
-            _ => {}
         }
-        let token = self.register(&mgr_tx, &req).await?;
-        info!("Register {:?} succeed", self.uid);
-        let ret = match req.conn_type.is_publish() {
-            true => self.publishing(&req, token).await,
-            false => self.playing(&req, token).await,
-        };
-        info!("Unegister {:?} {:?} succeed", self.uid, req.conn_type);
-        self.unregister(&mgr_tx, &req).await;
-        return ret;
     }
 
     async fn register(
@@ -113,12 +121,17 @@ impl RtmpService {
         }
     }
 
-    async fn playing(&mut self, req: &Request, token: Token) -> Result<(), ServiceError> {
+    async fn playing(
+        &mut self,
+        req: &Request,
+        token: Token,
+    ) -> Result<Option<RtmpCtrlAction>, ServiceError> {
         let mut rx = match token {
             Token::ComsumerToken(rx) => rx,
             _ => return Err(ServiceError::InvalidToken),
         };
         let mut msgs = Vec::with_capacity(128);
+        let mut pause = false;
         let mut cache_size = 0;
         let mut start_ts = 0;
         loop {
@@ -129,14 +142,18 @@ impl RtmpService {
                             match msg {
                                 RtmpMessage::Amf0Command { .. } => {
                                     info!("Server receive: {}", msg);
+                                    if let Some(act) = self.rtmp.process_amf_command(msg).await? {
+                                        match act {
+                                            RtmpCtrlAction::Pause(p) => {
+                                                info!("Player change pause state {}=>{}", pause, p);
+                                                pause = p;
+                                            },
+                                            _ => {}
+                                        }
+                                    }
                                 }
-                                RtmpMessage::Amf0Data { .. } => {
-                                    info!("Server receive: {}", msg);
-                                }
-                                RtmpMessage::VideoData {..} => {}
-                                RtmpMessage::AudioData {..} => {}
                                 RtmpMessage::Acknowledgement { .. } => {} // Do not trace
-                                other => info!("Server ignore msg {:?}", other)
+                                other => info!("Server receive and ignore: {}", other)
                             }
                         }
                         Err(err) => return Err(ServiceError::ConnectionError(err)),
@@ -145,6 +162,9 @@ impl RtmpService {
                 msg = rx.recv() => {
                     match msg {
                         Some(msg) => {
+                            if pause {
+                                continue;
+                            }
                             let cur_ts = msg.timestamp().unwrap_or(0);
                             cache_size += msg.len().unwrap_or(0);
                             msgs.push(msg);
@@ -165,7 +185,11 @@ impl RtmpService {
         }
     }
 
-    async fn publishing(&mut self, req: &Request, token: Token) -> Result<(), ServiceError> {
+    async fn publishing(
+        &mut self,
+        req: &Request,
+        token: Token,
+    ) -> Result<Option<RtmpCtrlAction>, ServiceError> {
         let mut hub = match token {
             Token::ProducerToken(hub) => hub,
             _ => return Err(ServiceError::InvalidToken),
@@ -178,6 +202,9 @@ impl RtmpService {
                             match msg {
                                 RtmpMessage::Amf0Command { .. } => {
                                     info!("Server receive: {}", msg);
+                                    if let Some(act) = self.rtmp.process_amf_command(msg).await? {
+                                        return Ok(Some(act));
+                                    }
                                 }
                                 RtmpMessage::Amf0Data { .. } => {
                                     info!("Server receive: {}", msg);
@@ -187,8 +214,7 @@ impl RtmpService {
                                 }
                                 RtmpMessage::VideoData {..} => hub.on_frame(msg)?,
                                 RtmpMessage::AudioData {..} => hub.on_frame(msg)?,
-                                RtmpMessage::Acknowledgement { .. } => {} // Do not trace
-                                other => info!("Server ignore msg {:?}", other)
+                                other => info!("Server receive msg and ignore: {}", other)
                             }
                         }
                         Err(err) => return Err(ServiceError::ConnectionError(err)),

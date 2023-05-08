@@ -11,8 +11,6 @@
 
 ## Protocol/rtmp-server
 - [ ] redirect
-- [ ] on_play_client_pause
-- [ ] fmle_unpublish
 - [ ] Bug fix: rtmpdump -r "rtmp://127.0.0.1:8081/live/stream?aaa=bbb", parsed stream is "stream?aaa=bbb"
 
 ## Protocol/rtmp-client
@@ -22,9 +20,7 @@
 - [ ] replace uuid
 
 ## Service/stream/hub
-- [ ] on_auido, on_video, on_metadata
-- [ ] gop cache
-
+- [ ] on_aggr
 
 ## Transports
 - [ ] read/write timeout
@@ -38,4 +34,4 @@
 
 # BUG
 - [ ] 150路推流，300路拉流的压测场景下，会有概率出现推流断流
-- [ ] merge-write，内存增长问题
+- [ ] 推流因超时断开后，stream manager中没有删除该条流记录
