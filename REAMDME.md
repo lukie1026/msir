@@ -9,8 +9,13 @@
 ## Protocol/rtmp-codec
 - [ ] improvement
 
+## Protocol/rtmp-chunk
+- [ ] refine ChunkCodec::send_rtmp_messages, maybe no need to use write_vectored for BufStream enabled
+- [ ] add IO stats
+
 ## Protocol/rtmp-server
 - [ ] redirect
+- [ ] response_acknowledgement_message
 - [ ] Bug fix: rtmpdump -r "rtmp://127.0.0.1:8081/live/stream?aaa=bbb", parsed stream is "stream?aaa=bbb"
 
 ## Protocol/rtmp-client
