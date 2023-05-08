@@ -110,7 +110,7 @@ pub struct ChunkCodec {
 impl ChunkCodec {
     pub fn new(io: TcpStream) -> Self {
         Self {
-            io: BufStream::with_capacity(131072, 0, io),
+            io: BufStream::with_capacity(131072, 131072, io),
             in_chunk_size: 128,
             out_chunk_size: 128,
             chunk_streams: HashMap::new(),
@@ -184,6 +184,7 @@ impl ChunkCodec {
                 }
             }
         }
+        self.io.flush().await?;
         Ok(())
     }
     fn add_chunk_header(

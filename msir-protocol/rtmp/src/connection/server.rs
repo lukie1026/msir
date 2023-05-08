@@ -7,17 +7,18 @@ use crate::{
     message::{
         request::Request,
         types::{
-            amf0_command_type::*, peer_bw_limit_type, rtmp_sig::*, rtmp_status::*,
+            amf0_command_type::*, peer_bw_limit_type, rtmp_sig::*,
             user_ctrl_ev_type::*, DEFAULT_SID,
         },
         RtmpMessage,
     },
 };
 
-use super::{context::Context, error::ConnectionError, RtmpConnType};
+use super::{context::Context, error::ConnectionError, RtmpConnType, RtmpCtrlAction};
 
 pub struct Server {
     ctx: Context,
+    conn_type: RtmpConnType,
 }
 
 impl Server {
@@ -26,6 +27,7 @@ impl Server {
         hs.handshake(&mut io).await?;
         Ok(Self {
             ctx: Context::new(io),
+            conn_type: RtmpConnType::Unknow,
         })
     }
     pub async fn recv_message(&mut self) -> Result<RtmpMessage, ConnectionError> {
@@ -39,6 +41,14 @@ impl Server {
     ) -> Result<(), ConnectionError> {
         trace!("Server response: {}", msg);
         self.ctx.send_message(msg, timestamp, csid).await
+    }
+    pub async fn send_messages(
+        &mut self,
+        msgs: &[RtmpMessage],
+        timestamp: u32,
+        csid: u32,
+    ) -> Result<(), ConnectionError> {
+        self.ctx.send_messages(&msgs, timestamp, csid).await
     }
     pub async fn identify_client(&mut self) -> Result<Request, ConnectionError> {
         let mut req = self.connect_app().await?;
@@ -72,6 +82,7 @@ impl Server {
                         continue;
                     }
                 };
+                self.conn_type = req.conn_type.clone();
                 return Ok(req);
             }
             return Err(ConnectionError::UnexpectedMessage);
@@ -383,5 +394,105 @@ impl Server {
         self.send_message(RtmpMessage::new_on_status_publish_start(), 0, 0)
             .await?;
         Ok(())
+    }
+
+    pub async fn process_amf_command(
+        &mut self,
+        msg: RtmpMessage,
+    ) -> Result<Option<RtmpCtrlAction>, ConnectionError> {
+        match msg {
+            RtmpMessage::Amf0Command {
+                command_name,
+                transaction_id,
+                additional_arguments,
+                ..
+            } => {
+                match self.conn_type {
+                    RtmpConnType::Play => {
+                        match command_name.as_str() {
+                            COMMAND_CLOSE_STREAM => Ok(Some(RtmpCtrlAction::Close)),
+                            COMMAND_PAUSE => {
+                                if additional_arguments.len() < 1 {
+                                    return Ok(None);
+                                }
+                                match additional_arguments[0] {
+                                    Amf0Value::Boolean(pause) => {
+                                        if pause {
+                                            // response onStatus(NetStream.Pause.Notify)
+                                            self.send_message(
+                                                RtmpMessage::new_on_status_pause(),
+                                                0,
+                                                0,
+                                            )
+                                            .await?;
+                                            // response StreamEOF
+                                            self.send_message(
+                                                RtmpMessage::UserControl {
+                                                    event_type: STREAM_EOF,
+                                                    event_data: DEFAULT_SID as u32,
+                                                    extra_data: 0,
+                                                },
+                                                0,
+                                                0,
+                                            )
+                                            .await?;
+                                        } else {
+                                            // response onStatus(NetStream.Unpause.Notify)
+                                            self.send_message(
+                                                RtmpMessage::new_on_status_pause(),
+                                                0,
+                                                0,
+                                            )
+                                            .await?;
+                                            // response StreamBegin
+                                            self.send_message(
+                                                RtmpMessage::UserControl {
+                                                    event_type: STREAM_BEGIN,
+                                                    event_data: DEFAULT_SID as u32,
+                                                    extra_data: 0,
+                                                },
+                                                0,
+                                                0,
+                                            )
+                                            .await?;
+                                        }
+                                        return Ok(Some(RtmpCtrlAction::Pause(pause)));
+                                    }
+                                    _ => return Ok(None),
+                                }
+                            }
+                            _ => {
+                                if transaction_id as u32 > 0 {
+                                    // Response null first for the other call msg
+                                    // FIXME: response in right way, or forward
+                                    self.send_message(RtmpMessage::new_null(transaction_id), 0, 0)
+                                        .await?;
+                                }
+                                Ok(None)
+                            }
+                        }
+                    }
+                    RtmpConnType::FmlePublish | RtmpConnType::HaivisionPublish => {
+                        if command_name == COMMAND_UNPUBLISH {
+                            // response onFCUnpublish(NetStream.Unpublish.Success)
+                            self.send_message(RtmpMessage::new_on_fcunpublish(), 0, 0)
+                                .await?;
+                            // response FCUnpublish
+                            self.send_message(RtmpMessage::new_fcpublish_res(transaction_id), 0, 0)
+                                .await?;
+                            // reponse onStatus(NetStream.Unpublish.Success)
+                            self.send_message(RtmpMessage::new_on_status_unpublish(), 0, 0)
+                                .await?;
+                            return Ok(Some(RtmpCtrlAction::Republish));
+                        }
+                        Ok(None)
+                    }
+                    // for flash, any packet is republish
+                    RtmpConnType::FlashPublish => Ok(Some(RtmpCtrlAction::Republish)),
+                    _ => Ok(None),
+                }
+            }
+            _ => Ok(None),
+        }
     }
 }

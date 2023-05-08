@@ -1,9 +1,6 @@
 use crate::{
     chunk::{ChunkCodec, ChunkStream},
-    message::{
-        types::{user_ctrl_ev_type::PING_RESPONSE, *},
-        RtmpMessage, RtmpPayload,
-    },
+    message::{types::*, RtmpMessage},
 };
 
 use std::collections::HashMap;
@@ -11,19 +8,6 @@ use tokio::net::TcpStream;
 use tracing::{error, info, trace, warn};
 
 use super::error::ConnectionError;
-
-// TODO: support FastStreamBuffer && sendtimeout recvtimeout
-// struct StreamBuffer {
-//     io: TcpStream,
-//     snd_tm: Duration,
-//     rcv_tm: Duration,
-// }
-
-// impl StreamBuffer {
-//     fn read(&self) {
-
-//     }
-// }
 
 #[derive(Default)]
 struct AckWindowSize {
@@ -123,6 +107,20 @@ impl Context {
         self.on_send_message(&msg)?;
         let payload = crate::message::encode(msg, timestamp, csid)?;
         self.chunk_io.send_rtmp_message(payload).await?;
+        Ok(())
+    }
+    pub async fn send_messages(
+        &mut self,
+        msgs: &[RtmpMessage],
+        timestamp: u32,
+        csid: u32,
+    ) -> Result<(), ConnectionError> {
+        let mut payloads = Vec::with_capacity(msgs.len());
+        for msg in msgs {
+            self.on_send_message(msg)?;
+            payloads.push(crate::message::encode(msg.clone(), timestamp, csid)?);
+        }
+        self.chunk_io.send_rtmp_messages(&payloads).await?;
         Ok(())
     }
     fn on_send_message(&mut self, msg: &RtmpMessage) -> Result<(), ConnectionError> {

@@ -25,6 +25,7 @@
 use msir_service::rtmp_service::RtmpService;
 use msir_service::stream::{Manager, StreamEvent};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::signal;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, info_span, instrument, trace, Instrument};
 use tracing_subscriber;
@@ -56,7 +57,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
     tokio::spawn(res_mgr.instrument(tracing::info_span!("RES-MGR")));
     tokio::spawn(proc_stat());
+    tokio::spawn(async move {
+        if let Err(err) = rtmp_server_start(tx).await {
+            error!("Rtmp server error: {}\n", err);
+        }
+    });
 
+    signal::ctrl_c().await?;
+    info!("msir exit...");
+    Ok(())
+}
+
+async fn resource_manager_start(
+    receiver: mpsc::UnboundedReceiver<StreamEvent>,
+) -> Result<(), Box<dyn Error>> {
+    Manager::new(receiver).run().await?;
+    Ok(())
+}
+
+async fn rtmp_server_start(tx: mpsc::UnboundedSender<StreamEvent>) -> Result<(), Box<dyn Error>> {
     let listen_addr = env::args()
         .nth(1)
         .unwrap_or_else(|| "0.0.0.0:8081".to_string());
@@ -81,13 +100,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn resource_manager_start(
-    receiver: mpsc::UnboundedReceiver<StreamEvent>,
-) -> Result<(), Box<dyn Error>> {
-    Manager::new(receiver).run().await?;
-    Ok(())
-}
-
 // #[instrument]
 async fn rtmp_service(
     inbound: TcpStream,
@@ -109,9 +121,9 @@ async fn proc_stat() {
         let curr = procfs::process::Process::myself().unwrap().stat().unwrap();
         let memory = curr.rss * procfs::page_size();
         if let Some(last) = last_stat {
-            let cpu = 100 * (curr.utime + curr.stime - last.utime - last.stime)
-                / intval
-                / procfs::ticks_per_second();
+            let cpu = (100 * (curr.utime + curr.stime - last.utime - last.stime)) as f32
+                / intval as f32
+                / procfs::ticks_per_second() as f32;
             info!("CPU {}% MEM {}MB", cpu, memory / 1024 / 1024);
         }
 

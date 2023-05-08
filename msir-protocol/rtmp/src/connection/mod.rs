@@ -3,7 +3,7 @@ mod context;
 pub mod error;
 pub mod server;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RtmpConnType {
     Play,
     FlvPlay,
@@ -22,4 +22,13 @@ impl RtmpConnType {
             _ => false,
         }
     }
+}
+
+pub enum RtmpCtrlAction {
+    // From publisher
+    Republish,
+    // From player
+    Pause(bool),
+    // From player
+    Close,
 }
