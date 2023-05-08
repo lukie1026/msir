@@ -2,6 +2,7 @@
 
 members = [
     "msir",
+    "msir-core",
     "msir-service",
     "msir-protocol/rtmp",
 ]

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{
     error::ServiceError,
     stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
@@ -194,8 +196,15 @@ impl RtmpService {
             Token::ProducerToken(hub) => hub,
             _ => return Err(ServiceError::InvalidToken),
         };
+        // let mut interval = tokio::time::interval(Duration::from_secs(1));
+        // let mut last_recv_bytes = 0;
         loop {
             tokio::select! {
+                // _ = interval.tick() => {
+                //     let curr_recv_bytes = self.rtmp.get_recv_bytes();
+                //     info!("Lukie recv bytes {}KB", (curr_recv_bytes - last_recv_bytes)/1024);
+                //     last_recv_bytes = curr_recv_bytes;
+                // }
                 msg = self.rtmp.recv_message() => {
                     match msg {
                         Ok(msg) => {

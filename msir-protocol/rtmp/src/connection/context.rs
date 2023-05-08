@@ -3,7 +3,7 @@ use crate::{
     message::{types::*, RtmpMessage},
 };
 
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 use tokio::net::TcpStream;
 use tracing::{error, info, trace, warn};
 
@@ -32,6 +32,22 @@ impl Context {
             out_ack_size: AckWindowSize::default(),
             in_buffer_length: 0,
         }
+    }
+
+    pub fn set_recv_timeout(&mut self, tm: Duration) {
+        self.chunk_io.set_recv_timeout(tm);
+    }
+
+    pub fn set_send_timeout(&mut self, tm: Duration) {
+        self.chunk_io.set_send_timeout(tm);
+    }
+
+    pub fn get_recv_bytes(&mut self) -> u64 {
+        self.chunk_io.get_recv_bytes()
+    }
+
+    pub fn get_send_bytes(&mut self) -> u64 {
+        self.chunk_io.get_send_bytes()
     }
 
     pub fn set_in_window_ack_size(&mut self, ack_size: u32) {

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use rml_amf0::Amf0Value;
 use tokio::net::TcpStream;
 use tracing::{info, trace, warn};
@@ -30,9 +32,27 @@ impl Server {
             conn_type: RtmpConnType::Unknow,
         })
     }
+
+    pub fn set_recv_timeout(&mut self, tm: Duration) {
+        self.ctx.set_recv_timeout(tm);
+    }
+
+    pub fn set_send_timeout(&mut self, tm: Duration) {
+        self.ctx.set_send_timeout(tm);
+    }
+
+    pub fn get_recv_bytes(&mut self) -> u64 {
+        self.ctx.get_recv_bytes()
+    }
+
+    pub fn get_send_bytes(&mut self) -> u64 {
+        self.ctx.get_send_bytes()
+    }
+
     pub async fn recv_message(&mut self) -> Result<RtmpMessage, ConnectionError> {
         self.ctx.recv_message().await
     }
+
     pub async fn send_message(
         &mut self,
         msg: RtmpMessage,
@@ -42,6 +62,7 @@ impl Server {
         trace!("Server response: {}", msg);
         self.ctx.send_message(msg, timestamp, csid).await
     }
+
     pub async fn send_messages(
         &mut self,
         msgs: &[RtmpMessage],
@@ -50,6 +71,7 @@ impl Server {
     ) -> Result<(), ConnectionError> {
         self.ctx.send_messages(&msgs, timestamp, csid).await
     }
+
     pub async fn identify_client(&mut self) -> Result<Request, ConnectionError> {
         let mut req = self.connect_app().await?;
         loop {
@@ -88,6 +110,7 @@ impl Server {
             return Err(ConnectionError::UnexpectedMessage);
         }
     }
+
     async fn connect_app(&mut self) -> Result<Request, ConnectionError> {
         if let RtmpMessage::Amf0Command {
             command_name,
@@ -164,6 +187,7 @@ impl Server {
         }
         return Err(ConnectionError::UnexpectedMessage);
     }
+
     async fn process_create_stream(
         &mut self,
         req: &mut Request,
@@ -212,6 +236,7 @@ impl Server {
         }
         Err(ConnectionError::CreateStreamDepth)
     }
+
     async fn process_fmle_publish(
         &mut self,
         req: &mut Request,
@@ -231,6 +256,7 @@ impl Server {
             .await?;
         Ok(())
     }
+
     fn process_flash_publish(
         &mut self,
         req: &mut Request,
@@ -246,6 +272,7 @@ impl Server {
         }
         Ok(())
     }
+
     async fn process_haivision_publish(
         &mut self,
         req: &mut Request,
@@ -265,6 +292,7 @@ impl Server {
             .await?;
         Ok(())
     }
+
     fn process_play(
         &mut self,
         req: &mut Request,
@@ -317,6 +345,7 @@ impl Server {
             .await?;
         Ok(())
     }
+
     pub async fn start_fmle_publish(&mut self) -> Result<(), ConnectionError> {
         // FCPublish
         if let RtmpMessage::Amf0Command { transaction_id, .. } =
@@ -369,6 +398,7 @@ impl Server {
         }
         Ok(())
     }
+
     pub async fn start_haivision_publish(&mut self) -> Result<(), ConnectionError> {
         // publish
         if let RtmpMessage::Amf0Command { transaction_id, .. } =
@@ -389,6 +419,7 @@ impl Server {
         }
         Ok(())
     }
+
     pub async fn start_flash_publish(&mut self) -> Result<(), ConnectionError> {
         // response onStatus(NetStream.Publish.Start)
         self.send_message(RtmpMessage::new_on_status_publish_start(), 0, 0)

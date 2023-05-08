@@ -484,6 +484,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "msir-core"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "msir-service"
 version = "0.1.0"
 dependencies = [
@@ -681,6 +689,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "chrono",
+ "msir-core",
  "rand",
  "rml_amf0",
  "snafu",

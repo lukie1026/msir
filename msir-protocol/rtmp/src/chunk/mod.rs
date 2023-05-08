@@ -2,10 +2,12 @@ use std::{
     cmp,
     collections::HashMap,
     io::{Cursor, IoSlice},
+    time::Duration,
 };
 
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{Buf, Bytes, BytesMut};
+use msir_core::transport::Transport;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufStream},
     net::TcpStream,
@@ -100,7 +102,7 @@ impl ChunkStream {
 
 pub struct ChunkCodec {
     // use BufStream to improve io performance
-    io: BufStream<TcpStream>,
+    io: Transport,
     in_chunk_size: usize,
     out_chunk_size: usize,
     chunk_streams: HashMap<u32, ChunkStream>, // TODO: Performance
@@ -110,19 +112,38 @@ pub struct ChunkCodec {
 impl ChunkCodec {
     pub fn new(io: TcpStream) -> Self {
         Self {
-            io: BufStream::with_capacity(131072, 131072, io),
+            io: Transport::new(io),
             in_chunk_size: 128,
             out_chunk_size: 128,
             chunk_streams: HashMap::new(),
             chunk_header_cache: Vec::with_capacity(16 * 128),
         }
     }
+
     pub fn set_in_chunk_size(&mut self, n: usize) {
         self.in_chunk_size = n;
     }
+
     pub fn set_out_chunk_size(&mut self, n: usize) {
         self.out_chunk_size = n;
     }
+
+    pub fn set_recv_timeout(&mut self, tm: Duration) {
+        self.io.set_recv_timeout(tm)
+    }
+
+    pub fn set_send_timeout(&mut self, tm: Duration) {
+        self.io.set_send_timeout(tm)
+    }
+
+    pub fn get_recv_bytes(&mut self) -> u64 {
+        self.io.get_recv_bytes()
+    }
+
+    pub fn get_send_bytes(&mut self) -> u64 {
+        self.io.get_send_bytes()
+    }
+
     pub async fn recv_rtmp_message(&mut self) -> Result<RtmpMessage> {
         loop {
             trace!("Receiving message...");
@@ -142,10 +163,12 @@ impl ChunkCodec {
             }
         }
     }
+
     pub async fn send_rtmp_message(&mut self, msg: RtmpPayload) -> Result<()> {
         let msgs = [msg];
         self.send_rtmp_messages(&msgs[0..1]).await
     }
+
     // pub async fn send_rtmp_messages2(&mut self, msgs: &[RtmpPayload]) -> Result<()> {
     //     for (_, msg) in msgs.into_iter().enumerate() {
     //         if msg.raw_data.is_empty() {
@@ -187,6 +210,7 @@ impl ChunkCodec {
     //     self.io.flush().await?;
     //     Ok(())
     // }
+
     pub async fn send_rtmp_messages(&mut self, msgs: &[RtmpPayload]) -> Result<()> {
         for msg in msgs.into_iter() {
             if msg.raw_data.is_empty() {
@@ -199,8 +223,10 @@ impl ChunkCodec {
                 let length = cmp::min(total - sent, self.out_chunk_size);
                 let (s, e) = self.add_chunk_header(msg, sent == 0, init)?;
                 self.io.write_all(&self.chunk_header_cache[s..e]).await?;
-                self.io.write_all(&msg.raw_data[sent..(sent + length)]).await?;
-                    
+                self.io
+                    .write_all(&msg.raw_data[sent..(sent + length)])
+                    .await?;
+
                 init = false;
                 sent += length;
                 if sent >= total {
@@ -211,6 +237,7 @@ impl ChunkCodec {
         self.io.flush().await?;
         Ok(())
     }
+
     fn add_chunk_header(
         &mut self,
         msg: &RtmpPayload,
