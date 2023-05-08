@@ -10,7 +10,7 @@
 - [ ] improvement
 
 ## Protocol/rtmp-chunk
-- [ ] refine ChunkCodec::send_rtmp_messages, maybe no need to use write_vectored for BufStream enabled
+- [x] refine ChunkCodec::send_rtmp_messages, maybe no need to use write_vectored for BufStream enabled
 - [ ] add IO stats
 
 ## Protocol/rtmp-server

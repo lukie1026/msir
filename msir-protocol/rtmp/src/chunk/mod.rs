@@ -146,8 +146,49 @@ impl ChunkCodec {
         let msgs = [msg];
         self.send_rtmp_messages(&msgs[0..1]).await
     }
+    // pub async fn send_rtmp_messages2(&mut self, msgs: &[RtmpPayload]) -> Result<()> {
+    //     for (_, msg) in msgs.into_iter().enumerate() {
+    //         if msg.raw_data.is_empty() {
+    //             continue;
+    //         }
+    //         let mut init = true;
+    //         let total = msg.raw_data.len();
+    //         let mut sent = 0_usize;
+    //         loop {
+    //             let length = cmp::min(total - sent, self.out_chunk_size);
+    //             let (s, e) = self.add_chunk_header(msg, sent == 0, init)?;
+    //             let mut write_array: Vec<IoSlice> = Vec::with_capacity(2);
+    //             let chunk_length = (e - s) + length;
+    //             let mut ret = 0_usize;
+    //             loop {
+    //                 if ret < chunk_length {
+    //                     write_array.clear();
+    //                     if ret >= (e - s) {
+    //                         write_array.push(IoSlice::new(
+    //                             &msg.raw_data[(sent + (ret - (e - s)))..(sent + length)],
+    //                         ));
+    //                     } else {
+    //                         write_array.push(IoSlice::new(&self.chunk_header_cache[(s + ret)..e]));
+    //                         write_array.push(IoSlice::new(&msg.raw_data[sent..(sent + length)]));
+    //                     }
+    //                 } else {
+    //                     break;
+    //                 }
+    //                 ret += self.io.write_vectored(&write_array).await?;
+    //             }
+
+    //             init = false;
+    //             sent += length;
+    //             if sent >= total {
+    //                 break;
+    //             }
+    //         }
+    //     }
+    //     self.io.flush().await?;
+    //     Ok(())
+    // }
     pub async fn send_rtmp_messages(&mut self, msgs: &[RtmpPayload]) -> Result<()> {
-        for (_, msg) in msgs.into_iter().enumerate() {
+        for msg in msgs.into_iter() {
             if msg.raw_data.is_empty() {
                 continue;
             }
@@ -157,26 +198,9 @@ impl ChunkCodec {
             loop {
                 let length = cmp::min(total - sent, self.out_chunk_size);
                 let (s, e) = self.add_chunk_header(msg, sent == 0, init)?;
-                let mut write_array: Vec<IoSlice> = Vec::with_capacity(2);
-                let chunk_length = (e - s) + length;
-                let mut ret = 0_usize;
-                loop {
-                    if ret < chunk_length {
-                        write_array.clear();
-                        if ret >= (e - s) {
-                            write_array.push(IoSlice::new(
-                                &msg.raw_data[(sent + (ret - (e - s)))..(sent + length)],
-                            ));
-                        } else {
-                            write_array.push(IoSlice::new(&self.chunk_header_cache[(s + ret)..e]));
-                            write_array.push(IoSlice::new(&msg.raw_data[sent..(sent + length)]));
-                        }
-                    } else {
-                        break;
-                    }
-                    ret += self.io.write_vectored(&write_array).await?;
-                }
-
+                self.io.write_all(&self.chunk_header_cache[s..e]).await?;
+                self.io.write_all(&msg.raw_data[sent..(sent + length)]).await?;
+                    
                 init = false;
                 sent += length;
                 if sent >= total {
