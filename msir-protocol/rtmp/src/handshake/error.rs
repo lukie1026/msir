@@ -1,3 +1,4 @@
+use msir_core::transport::TransportError;
 use std::io;
 use thiserror::Error;
 
@@ -13,4 +14,8 @@ pub enum HandshakeError {
     /// Failed to read the values
     #[error("An IO error occurred: {0}")]
     Io(#[from] io::Error),
+
+    // Failed to read the values
+    #[error("A Transport IO error occurred: {0}")]
+    Transport(#[from] TransportError),
 }

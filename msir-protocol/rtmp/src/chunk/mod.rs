@@ -110,9 +110,9 @@ pub struct ChunkCodec {
 }
 
 impl ChunkCodec {
-    pub fn new(io: TcpStream) -> Self {
+    pub fn new(io: Transport) -> Self {
         Self {
-            io: Transport::new(io),
+            io,
             in_chunk_size: 128,
             out_chunk_size: 128,
             chunk_streams: HashMap::new(),

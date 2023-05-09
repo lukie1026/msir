@@ -22,6 +22,7 @@
 
 #![warn(rust_2018_idioms)]
 
+use msir_core::transport::Transport;
 use msir_service::rtmp_service::RtmpService;
 use msir_service::stream::{Manager, StreamEvent};
 use tokio::net::{TcpListener, TcpStream};
@@ -106,7 +107,10 @@ async fn rtmp_service(
     uid: Uuid,
     tx: mpsc::UnboundedSender<StreamEvent>,
 ) -> Result<(), Box<dyn Error>> {
-    RtmpService::new(inbound, Some(uid)).await?.run(tx).await?;
+    RtmpService::new(Transport::new(inbound), Some(uid))
+        .await?
+        .run(tx)
+        .await?;
     Ok(())
 }
 

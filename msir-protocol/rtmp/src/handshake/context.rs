@@ -1,8 +1,8 @@
 use super::{error::HandshakeError, RTMP_HANDSHAKE_SIZE, RTMP_VERSION};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, Bytes, BytesMut};
+use msir_core::transport::Transport;
 use rand::Rng;
-use tokio::{io::AsyncReadExt, net::TcpStream};
 use tracing::{error, info, info_span, instrument, trace};
 
 pub struct Context {
@@ -22,21 +22,21 @@ impl Context {
             c2: BytesMut::new(),
         }
     }
-    pub async fn read_c0c1(&mut self, io: &mut TcpStream) -> Result<(), HandshakeError> {
+    pub async fn read_c0c1(&mut self, io: &mut Transport) -> Result<(), HandshakeError> {
         if self.c0c1.is_empty() {
             self.c0c1.resize(RTMP_HANDSHAKE_SIZE + 1, 0);
             io.read_exact(&mut self.c0c1).await?;
         }
         Ok(())
     }
-    pub async fn read_s0s1s2(&mut self, io: &mut TcpStream) -> Result<(), HandshakeError> {
+    pub async fn read_s0s1s2(&mut self, io: &mut Transport) -> Result<(), HandshakeError> {
         if self.s0s1s2.is_empty() {
             self.s0s1s2.resize(1 + RTMP_HANDSHAKE_SIZE * 2, 0);
             io.read_exact(&mut self.s0s1s2).await?;
         }
         Ok(())
     }
-    pub async fn read_c2(&mut self, io: &mut TcpStream) -> Result<(), HandshakeError> {
+    pub async fn read_c2(&mut self, io: &mut Transport) -> Result<(), HandshakeError> {
         if self.c2.is_empty() {
             self.c2.resize(RTMP_HANDSHAKE_SIZE, 0);
             io.read_exact(&mut self.c2).await?;

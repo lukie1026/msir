@@ -4,6 +4,7 @@ use crate::{
     error::ServiceError,
     stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
 };
+use msir_core::transport::Transport;
 use rtmp::connection::RtmpConnType;
 use rtmp::connection::{server as rtmp_conn, RtmpCtrlAction};
 use rtmp::message::request::Request;
@@ -20,7 +21,7 @@ pub struct RtmpService {
 }
 
 impl RtmpService {
-    pub async fn new(io: TcpStream, uid: Option<Uuid>) -> Result<Self, ServiceError> {
+    pub async fn new(io: Transport, uid: Option<Uuid>) -> Result<Self, ServiceError> {
         let rtmp = rtmp_conn::Server::new(io).await?;
         let uid = uid.unwrap_or_else(|| Uuid::new_v4());
         Ok(Self { uid, rtmp })

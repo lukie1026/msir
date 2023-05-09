@@ -40,3 +40,4 @@
 # BUG
 - [ ] 150路推流，300路拉流的压测场景下，会有概率出现推流断流
 - [ ] 推流因超时断开后，stream manager中没有删除该条流记录
+- [ ] IMPORTANT!!! read_exact 和 write_all 在 tokio::select中使用时不安全的，需要重新设计

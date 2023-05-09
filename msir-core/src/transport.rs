@@ -5,6 +5,7 @@ use tokio::{
     net::TcpStream,
     time::{error::Elapsed, timeout},
 };
+use tracing::{error, info, instrument, trace, warn};
 
 pub static NOTIMEOUT: Duration = Duration::MAX;
 
@@ -89,14 +90,14 @@ impl Transport {
     pub async fn read_exact(&mut self, buf: &mut [u8]) -> Result<usize> {
         if self.recv_timeout == NOTIMEOUT {
             Ok(self.io.read_exact(buf).await.and_then(|ret| {
-                self.recv_bytes += buf.len() as u64;
+                self.recv_bytes += ret as u64;
                 Ok(ret)
             })?)
         } else {
             Ok(timeout(self.recv_timeout, self.io.read_exact(buf))
                 .await?
                 .and_then(|ret| {
-                    self.recv_bytes += buf.len() as u64;
+                    self.recv_bytes += ret as u64;
                     Ok(ret)
                 })?)
         }
