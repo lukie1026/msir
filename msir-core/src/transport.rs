@@ -21,6 +21,9 @@ pub enum TransportError {
     #[error("Read unexpected EOF")]
     ReadUnexpectedEof,
 
+    #[error("End of file")]
+    EndOfFile,
+
     #[error("An IO error occurred: {0}")]
     Io(#[from] io::Error),
 
@@ -111,6 +114,24 @@ impl Transport {
                     Ok(ret)
                 })?)
         }
+    }
+
+    pub async fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        if buf.len() == 0 {
+            return Err(TransportError::BufNoSpace);
+        }
+        let nread;
+        if self.recv_timeout == NOTIMEOUT {
+            nread = self.io.read(buf).await?;
+        } else {
+            nread = timeout(self.recv_timeout, self.io.read(buf)).await??
+        }
+
+        if nread == 0 {
+            return Err(TransportError::ReadUnexpectedEof)
+        }
+        self.recv_bytes += nread as u64;
+        Ok(nread)
     }
 
     pub async fn write_all2(&mut self, buf: &[u8]) -> Result<()> {

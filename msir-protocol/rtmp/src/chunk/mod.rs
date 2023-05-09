@@ -317,7 +317,11 @@ impl ChunkCodec {
         let mh_size = MH_SIZES[fmt as usize] as usize;
         let mut mh = BytesMut::with_capacity(mh_size);
         mh.resize(mh_size, 0);
-        self.io.read_exact(&mut mh).await?;
+        // self.io.read_exact(&mut mh).await?;
+        let mut nread = 0;
+        while nread < mh.len() {
+            nread += self.io.read(&mut mh[nread..]).await?;
+        }
         if fmt <= RTMP_FMT_TYPE2 {
             chunk.header.timestamp_delta = Cursor::new(mh.split_to(3)).read_u24::<BigEndian>()?;
             chunk.extended_timestamp = chunk.header.timestamp_delta >= RTMP_EXTENDED_TIMESTAMP;
@@ -387,7 +391,11 @@ impl ChunkCodec {
         // create msg payload if not initialized
         let mut buffer = Vec::<u8>::with_capacity(payload_size);
         unsafe { buffer.set_len(payload_size) };
-        self.io.read_exact(&mut buffer).await?;
+        // self.io.read_exact(&mut buffer).await?;
+        let mut nread = 0;
+        while nread < buffer.len() {
+            nread += self.io.read(&mut buffer[nread..]).await?;
+        }
 
         // read payload to buffer
         chunk.payload.extend_from_slice(&buffer);

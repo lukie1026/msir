@@ -25,21 +25,33 @@ impl Context {
     pub async fn read_c0c1(&mut self, io: &mut Transport) -> Result<(), HandshakeError> {
         if self.c0c1.is_empty() {
             self.c0c1.resize(RTMP_HANDSHAKE_SIZE + 1, 0);
-            io.read_exact(&mut self.c0c1).await?;
+            // io.read_exact(&mut self.c0c1).await?;
+            let mut nread = 0;
+            while nread < self.c0c1.len() {
+                nread += io.read(&mut self.c0c1[nread..]).await?;
+            }
         }
         Ok(())
     }
     pub async fn read_s0s1s2(&mut self, io: &mut Transport) -> Result<(), HandshakeError> {
         if self.s0s1s2.is_empty() {
             self.s0s1s2.resize(1 + RTMP_HANDSHAKE_SIZE * 2, 0);
-            io.read_exact(&mut self.s0s1s2).await?;
+            // io.read_exact(&mut self.s0s1s2).await?;
+            let mut nread = 0;
+            while nread < self.s0s1s2.len() {
+                nread += io.read(&mut self.s0s1s2[nread..]).await?;
+            }
         }
         Ok(())
     }
     pub async fn read_c2(&mut self, io: &mut Transport) -> Result<(), HandshakeError> {
         if self.c2.is_empty() {
             self.c2.resize(RTMP_HANDSHAKE_SIZE, 0);
-            io.read_exact(&mut self.c2).await?;
+            // io.read_exact(&mut self.c2).await?;
+            let mut nread = 0;
+            while nread < self.c2.len() {
+                nread += io.read(&mut self.c2[nread..]).await?;
+            }
         }
         Ok(())
     }
