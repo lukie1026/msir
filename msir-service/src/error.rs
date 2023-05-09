@@ -1,6 +1,7 @@
-use crate::stream::error::StreamError;
-use rtmp::connection::error::ConnectionError;
+use crate::stream::{error::StreamError, hub::HubEvent};
+use rtmp::{connection::error::ConnectionError, message::RtmpMessage};
 use thiserror::Error;
+use tokio::sync::mpsc::error::SendError;
 
 #[derive(Debug, Error)]
 pub enum ServiceError {
@@ -18,4 +19,7 @@ pub enum ServiceError {
 
     #[error("Publish is done")]
     PublishDone,
+
+    #[error("Channel send failed: {0}")]
+    SendCh(#[from] SendError<HubEvent>),
 }

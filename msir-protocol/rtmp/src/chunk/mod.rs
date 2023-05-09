@@ -199,8 +199,10 @@ impl ChunkCodec {
                 let length = cmp::min(total - sent, self.out_chunk_size);
                 let (s, e) = self.add_chunk_header(msg, sent == 0, init)?;
                 self.io.write_all(&self.chunk_header_cache[s..e]).await?;
-                self.io.write_all(&msg.raw_data[sent..(sent + length)]).await?;
-                    
+                self.io
+                    .write_all(&msg.raw_data[sent..(sent + length)])
+                    .await?;
+
                 init = false;
                 sent += length;
                 if sent >= total {

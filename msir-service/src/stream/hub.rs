@@ -1,15 +1,25 @@
 use std::collections::HashMap;
 
 use rtmp::{codec, message::RtmpMessage};
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tracing::{info, warn};
 use uuid::Uuid;
 
 use super::{error::StreamError, gop::GopCache};
 
+#[derive(Debug)]
 pub enum HubEvent {
     ComsumerJoin(Uuid, mpsc::UnboundedSender<RtmpMessage>),
     ComsumerLeave(Uuid),
+
+    Publish(),
+    PublishDone(),
+
+    Pull(),
+    PullDone(),
+
+    Frame(RtmpMessage),
+    Meta(RtmpMessage),
 }
 
 #[derive(Debug, Default)]
@@ -37,42 +47,59 @@ impl Hub {
         }
     }
 
-    pub async fn process_hub_ev(&mut self) -> Result<(), StreamError> {
-        match self.receiver.recv().await {
-            Some(ev) => {
-                match ev {
-                    HubEvent::ComsumerJoin(uid, tx) => {
-                        // send metadata
-                        if let Some(meta) = &self.meta.metadata {
-                            if let Err(e) = tx.send(meta.clone()) {
-                                warn!("Hub send metadata to comsumer failed: {:?}", e);
+    pub async fn run(&mut self) -> Result<(), StreamError> {
+        loop {
+            match self.receiver.recv().await {
+                Some(ev) => {
+                    match ev {
+                        HubEvent::ComsumerJoin(uid, tx) => {
+                            // send metadata
+                            if let Some(meta) = &self.meta.metadata {
+                                if let Err(e) = tx.send(meta.clone()) {
+                                    warn!("Hub send metadata to comsumer failed: {:?}", e);
+                                }
                             }
-                        }
-                        // send audio sequence heade
-                        if let Some(meta) = &self.meta.audio_sh {
-                            if let Err(e) = tx.send(meta.clone()) {
-                                warn!("Hub send audio sh to comsumer failed: {:?}", e);
+                            // send audio sequence heade
+                            if let Some(meta) = &self.meta.audio_sh {
+                                if let Err(e) = tx.send(meta.clone()) {
+                                    warn!("Hub send audio sh to comsumer failed: {:?}", e);
+                                }
                             }
-                        }
-                        // send video sequence heade
-                        if let Some(meta) = &self.meta.video_sh {
-                            if let Err(e) = tx.send(meta.clone()) {
-                                warn!("Hub send video sh to comsumer failed: {:?}", e);
+                            // send video sequence heade
+                            if let Some(meta) = &self.meta.video_sh {
+                                if let Err(e) = tx.send(meta.clone()) {
+                                    warn!("Hub send video sh to comsumer failed: {:?}", e);
+                                }
                             }
-                        }
-                        // send gopcache
-                        for msg in self.gop.caches.iter() {
-                            if let Err(e) = tx.send(msg.clone()) {
-                                warn!("Hub send avdata to comsumer failed: {:?}", e);
+                            // send gopcache
+                            for msg in self.gop.caches.iter() {
+                                if let Err(e) = tx.send(msg.clone()) {
+                                    warn!("Hub send avdata to comsumer failed: {:?}", e);
+                                }
                             }
+                            self.comsumers.insert(uid, tx);
                         }
-                        self.comsumers.insert(uid, tx)
-                    }
-                    HubEvent::ComsumerLeave(uid) => self.comsumers.remove(&uid),
-                };
-                Ok(())
+                        HubEvent::ComsumerLeave(uid) => {
+                            self.comsumers.remove(&uid);
+                        }
+                        HubEvent::Publish() => {
+                            info!("Hub open");
+                        }
+                        HubEvent::PublishDone() => {
+                            info!("Hub closed");
+                        }
+                        HubEvent::Pull() => {}
+                        HubEvent::PullDone() => {}
+                        HubEvent::Frame(msg) => {
+                            self.on_frame(msg);
+                        }
+                        HubEvent::Meta(msg) => {
+                            self.on_metadata(msg);
+                        }
+                    };
+                }
+                None => return Err(StreamError::HubClosed),
             }
-            None => Err(StreamError::HubClosed),
         }
     }
 
@@ -112,4 +139,8 @@ impl Hub {
         self.gop.cache(msg);
         Ok(())
     }
+}
+
+pub async fn hub_service_start(rx: UnboundedReceiver<HubEvent>) -> Result<(), StreamError> {
+    Hub::new(rx).run().await
 }

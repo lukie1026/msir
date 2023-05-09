@@ -1,6 +1,6 @@
 use crate::{
     error::ServiceError,
-    stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
+    stream::{hub::HubEvent, RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
 };
 use rtmp::connection::RtmpConnType;
 use rtmp::connection::{server as rtmp_conn, RtmpCtrlAction};
@@ -195,37 +195,29 @@ impl RtmpService {
             _ => return Err(ServiceError::InvalidToken),
         };
         loop {
-            tokio::select! {
-                msg = self.rtmp.recv_message() => {
-                    match msg {
-                        Ok(msg) => {
-                            match msg {
-                                RtmpMessage::Amf0Command { .. } => {
-                                    info!("Server receive: {}", msg);
-                                    if let Some(act) = self.rtmp.process_amf_command(msg).await? {
-                                        return Ok(Some(act));
-                                    }
-                                }
-                                RtmpMessage::Amf0Data { .. } => {
-                                    info!("Server receive: {}", msg);
-                                    if msg.is_metadata() {
-                                        hub.on_metadata(msg)?;
-                                    }
-                                }
-                                RtmpMessage::VideoData {..} => hub.on_frame(msg)?,
-                                RtmpMessage::AudioData {..} => hub.on_frame(msg)?,
-                                other => info!("Server receive msg and ignore: {}", other)
-                            }
+            match self.rtmp.recv_message().await {
+                Ok(msg) => match msg {
+                    RtmpMessage::Amf0Command { .. } => {
+                        info!("Server receive: {}", msg);
+                        if let Some(act) = self.rtmp.process_amf_command(msg).await? {
+                            return Ok(Some(act));
                         }
-                        Err(err) => return Err(ServiceError::ConnectionError(err)),
                     }
-                }
-                ret = hub.process_hub_ev() => {
-                    info!("Proccess hub event: {:?}", ret);
-                    if let Err(e) = ret {
-                        return Err(ServiceError::HubError(e));
+                    RtmpMessage::Amf0Data { .. } => {
+                        info!("Server receive: {}", msg);
+                        if msg.is_metadata() {
+                            hub.send(HubEvent::Meta(msg))?;
+                        }
                     }
-                }
+                    RtmpMessage::VideoData { .. } => {
+                        hub.send(HubEvent::Frame(msg))?;
+                    }
+                    RtmpMessage::AudioData { .. } => {
+                        hub.send(HubEvent::Frame(msg))?;
+                    }
+                    other => info!("Server receive msg and ignore: {}", other),
+                },
+                Err(err) => return Err(ServiceError::ConnectionError(err)),
             }
         }
     }

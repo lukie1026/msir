@@ -5,7 +5,7 @@ use self::{
 use rtmp::message::RtmpMessage;
 use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{error, info, warn};
+use tracing::{error, info, warn, Instrument};
 use uuid::Uuid;
 
 pub mod error;
@@ -21,7 +21,7 @@ pub enum RoleType {
 #[derive(Debug)]
 pub enum Token {
     Failure(StreamError),
-    ProducerToken(Hub),
+    ProducerToken(mpsc::UnboundedSender<HubEvent>),
     ComsumerToken(mpsc::UnboundedReceiver<RtmpMessage>),
 }
 
@@ -83,8 +83,13 @@ impl Manager {
                     Token::Failure(StreamError::DuplicatePublish)
                 } else {
                     let (tx, rx) = mpsc::unbounded_channel();
-                    self.pool.insert(ev.stream_key, tx);
-                    Token::ProducerToken(Hub::new(rx))
+                    self.pool.insert(ev.stream_key, tx.clone());
+                    let hub_service = hub::hub_service_start;
+                    tokio::spawn(
+                        hub_service(rx)
+                            .instrument(tracing::info_span!("HUB", uid = ev.uid.to_string())),
+                    );
+                    Token::ProducerToken(tx)
                 }
             }
             RoleType::Consumer => {
