@@ -1,4 +1,5 @@
 use self::error::HandshakeError;
+use msir_core::transport::Transport;
 use tokio::net::TcpStream;
 
 mod complex_hs;
@@ -23,7 +24,7 @@ impl Server {
             ctx: context::Context::new(),
         }
     }
-    pub async fn handshake(&mut self, io: &mut TcpStream) -> Result<(), HandshakeError> {
+    pub async fn handshake(&mut self, io: &mut Transport) -> Result<(), HandshakeError> {
         match self.complex.handshake_with_client(&mut self.ctx, io).await {
             Ok(_) => return Ok(()),
             Err(err) => {
@@ -41,20 +42,16 @@ impl Server {
 pub struct Client {
     simple: simple_hs::SimpleHandshake,
     ctx: context::Context,
-    io: TcpStream,
 }
 
 impl Client {
-    pub fn new(io: TcpStream) -> Self {
+    pub fn new() -> Self {
         Self {
             simple: simple_hs::SimpleHandshake {},
             ctx: context::Context::new(),
-            io,
         }
     }
-    pub async fn handshake(&mut self) -> Result<(), HandshakeError> {
-        self.simple
-            .handshake_with_client(&mut self.ctx, &mut self.io)
-            .await
+    pub async fn handshake(&mut self, io: &mut Transport) -> Result<(), HandshakeError> {
+        self.simple.handshake_with_client(&mut self.ctx, io).await
     }
 }

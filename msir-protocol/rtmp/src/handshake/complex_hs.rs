@@ -1,4 +1,5 @@
 use super::{context::Context, error::HandshakeError, RTMP_HANDSHAKE_SIZE, RTMP_VERSION};
+use msir_core::transport::Transport;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 use tracing::{error, info, info_span, instrument, trace};
 
@@ -8,7 +9,7 @@ impl ComplexHandshake {
     pub async fn handshake_with_server(
         &self,
         ctx: &mut Context,
-        io: &mut TcpStream,
+        io: &mut Transport,
     ) -> Result<(), HandshakeError> {
         info!("Complex handshake do not implement, try simple");
 
@@ -17,7 +18,7 @@ impl ComplexHandshake {
     pub async fn handshake_with_client(
         &self,
         ctx: &mut Context,
-        io: &mut TcpStream,
+        io: &mut Transport,
     ) -> Result<(), HandshakeError> {
         info!("Complex handshake do not implement, try simple");
 
