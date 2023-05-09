@@ -31,6 +31,7 @@ struct MetaCache {
 
 #[derive(Debug)]
 pub struct Hub {
+    stream_id: String,
     meta: MetaCache,
     pub gop: GopCache,
     pub receiver: mpsc::UnboundedReceiver<HubEvent>,
@@ -38,8 +39,9 @@ pub struct Hub {
 }
 
 impl Hub {
-    pub fn new(rx: mpsc::UnboundedReceiver<HubEvent>) -> Self {
+    pub fn new(stream_id: String, rx: mpsc::UnboundedReceiver<HubEvent>) -> Self {
         Self {
+            stream_id,
             gop: GopCache::new(),
             meta: MetaCache::default(),
             receiver: rx,
@@ -83,10 +85,10 @@ impl Hub {
                             self.comsumers.remove(&uid);
                         }
                         HubEvent::Publish() => {
-                            info!("Hub open");
+                            info!("Hub open {}", self.stream_id);
                         }
                         HubEvent::PublishDone() => {
-                            info!("Hub closed");
+                            info!("Hub closed {}", self.stream_id);
                         }
                         HubEvent::Pull() => {}
                         HubEvent::PullDone() => {}
@@ -141,6 +143,9 @@ impl Hub {
     }
 }
 
-pub async fn hub_service_start(rx: UnboundedReceiver<HubEvent>) -> Result<(), StreamError> {
-    Hub::new(rx).run().await
+pub async fn hub_service_start(
+    stream_id: String,
+    rx: UnboundedReceiver<HubEvent>,
+) -> Result<(), StreamError> {
+    Hub::new(stream_id, rx).run().await
 }

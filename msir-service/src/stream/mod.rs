@@ -83,10 +83,11 @@ impl Manager {
                     Token::Failure(StreamError::DuplicatePublish)
                 } else {
                     let (tx, rx) = mpsc::unbounded_channel();
-                    self.pool.insert(ev.stream_key, tx.clone());
+                    self.pool.insert(ev.stream_key.clone(), tx.clone());
                     let hub_service = hub::hub_service_start;
+                    let _ = tx.send(HubEvent::Publish());
                     tokio::spawn(
-                        hub_service(rx)
+                        hub_service(ev.stream_key, rx)
                             .instrument(tracing::info_span!("HUB", uid = ev.uid.to_string())),
                     );
                     Token::ProducerToken(tx)
@@ -128,7 +129,10 @@ impl Manager {
                     }
                 }
                 RoleType::Producer => {
-                    self.pool.remove(&ev.stream_key);
+                    self.pool.remove(&ev.stream_key).and_then(|tx| {
+                        let _ = tx.send(HubEvent::PublishDone());
+                        Some(tx)
+                    });
                 }
             }
         } else {
