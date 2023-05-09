@@ -1,4 +1,8 @@
-use std::{io, time::Duration};
+use bytes::{Buf, Bytes, BytesMut};
+use std::{
+    io::{self, Cursor},
+    time::Duration,
+};
 use thiserror::Error;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufStream},
@@ -11,6 +15,12 @@ pub static NOTIMEOUT: Duration = Duration::MAX;
 
 #[derive(Debug, Error)]
 pub enum TransportError {
+    #[error("Read buffer has no space")]
+    BufNoSpace,
+
+    #[error("Read unexpected EOF")]
+    ReadUnexpectedEof,
+
     #[error("An IO error occurred: {0}")]
     Io(#[from] io::Error),
 
@@ -103,7 +113,7 @@ impl Transport {
         }
     }
 
-    pub async fn write_all(&mut self, buf: &[u8]) -> Result<()> {
+    pub async fn write_all2(&mut self, buf: &[u8]) -> Result<()> {
         if self.send_timeout == NOTIMEOUT {
             Ok(self.io.write_all(buf).await.and_then(|ret| {
                 self.send_bytes += buf.len() as u64;
@@ -121,6 +131,91 @@ impl Transport {
 
     pub async fn flush(&mut self) -> Result<()> {
         Ok(self.io.flush().await?)
+    }
+
+    pub async fn read_exact2(&mut self, buf: &mut [u8]) -> Result<()> {
+        let need_read = buf.len();
+        let mut nread = 0;
+        if need_read <= 0 {
+            return Ok(());
+            // return Err(TransportError::BufNoSpace);
+        }
+        let mut data = Cursor::new(buf);
+        let mut tmp: Vec<u8> = Vec::with_capacity(need_read);
+        tmp.resize(need_read, 0);
+        if self.recv_timeout == NOTIMEOUT {
+            while nread < need_read {
+                let n = self.io.read(&mut tmp).await?;
+                if n == 0 {
+                    break;
+                }
+                nread += n;
+                data.write(&tmp).await?;
+                tmp.resize(need_read - nread, 0);
+            }
+        } else {
+            while nread < need_read {
+                let n = timeout(self.recv_timeout, self.io.read(&mut tmp)).await??;
+                if n == 0 {
+                    break;
+                }
+                nread += n;
+                data.write(&tmp).await?;
+                tmp.resize(need_read - nread, 0);
+            }
+        }
+        self.recv_bytes += nread as u64;
+        if nread < need_read {
+            return Err(TransportError::ReadUnexpectedEof);
+        }
+        Ok(())
+    }
+
+    pub async fn read_all_buf(&mut self, buf: &mut BytesMut) -> Result<()> {
+        let need_read = buf.capacity() - buf.len();
+        let mut nread = 0;
+        if need_read <= 0 {
+            return Err(TransportError::BufNoSpace);
+        }
+        if self.recv_timeout == NOTIMEOUT {
+            while nread < need_read {
+                let n = self.io.read_buf(buf).await?;
+                if n == 0 {
+                    break;
+                }
+                nread += n;
+            }
+        } else {
+            while nread < need_read {
+                let n = timeout(self.recv_timeout, self.io.read_buf(buf)).await??;
+                if n == 0 {
+                    break;
+                }
+                nread += n;
+            }
+        }
+        self.recv_bytes += nread as u64;
+        if nread < need_read {
+            return Err(TransportError::ReadUnexpectedEof);
+        }
+        Ok(())
+    }
+
+    pub async fn write_all(&mut self, data: &[u8]) -> Result<()> {
+        let mut buf = Cursor::new(data);
+        if self.send_timeout == NOTIMEOUT {
+            Ok(self.io.write_all_buf(&mut buf).await.and_then(|ret| {
+                self.send_bytes += data.len() as u64;
+                Ok(ret)
+            })?)
+        } else {
+            Ok(timeout(self.send_timeout, self.io.write_all_buf(&mut buf))
+                .await?
+                .and_then(|ret| {
+                    self.send_bytes += data.len() as u64;
+                    Ok(ret)
+                })?)
+        }
     }
 
     // pub async fn read_exact_nostats(&mut self, buf: &mut [u8]) -> Result<usize> {
