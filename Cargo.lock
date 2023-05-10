@@ -498,11 +498,11 @@ name = "msir-service"
 version = "0.1.0"
 dependencies = [
  "msir-core",
+ "rand",
  "rtmp",
  "thiserror",
  "tokio",
  "tracing",
- "uuid",
 ]
 
 [[package]]
