@@ -93,14 +93,17 @@ impl Hub {
                         HubEvent::Pull() => {}
                         HubEvent::PullDone() => {}
                         HubEvent::Frame(msg) => {
-                            self.on_frame(msg);
+                            let _ = self.on_frame(msg);
                         }
                         HubEvent::Meta(msg) => {
-                            self.on_metadata(msg);
+                            let _ = self.on_metadata(msg);
                         }
                     };
                 }
-                None => return Err(StreamError::HubClosed),
+                None => {
+                    info!("Hub exit"); 
+                    return Err(StreamError::HubClosed);
+                }
             }
         }
     }
