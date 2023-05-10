@@ -98,6 +98,35 @@ impl ChunkStream {
     }
 }
 
+struct Cache {
+    saved_btyes: Vec<u8>,
+    read_pos: usize,
+    write_pos: usize,
+}
+
+impl Cache {
+    fn new() -> Self {
+        Self {
+            read_pos: 0,
+            write_pos: 0,
+            saved_btyes: Vec::with_capacity(4096),
+        }
+    }
+
+    fn enter(&mut self) {
+        self.read_pos = 0;
+    }
+
+    fn leave(&mut self) {
+        self.read_pos = 0;
+        self.write_pos = 0;
+    }
+
+    fn unread_bytes(&mut self) -> usize {
+        self.write_pos - self.read_pos
+    }
+}
+
 pub struct ChunkCodec {
     // use BufStream to improve io performance
     io: BufStream<TcpStream>,
@@ -105,6 +134,8 @@ pub struct ChunkCodec {
     out_chunk_size: usize,
     chunk_streams: HashMap<u32, ChunkStream>, // TODO: Performance
     chunk_header_cache: Vec<u8>,
+    // for cancel safe
+    cache: Cache,
 }
 
 impl ChunkCodec {
@@ -115,6 +146,7 @@ impl ChunkCodec {
             out_chunk_size: 128,
             chunk_streams: HashMap::new(),
             chunk_header_cache: Vec::with_capacity(16 * 128),
+            cache: Cache::new(),
         }
     }
     pub fn set_in_chunk_size(&mut self, n: usize) {
@@ -199,8 +231,10 @@ impl ChunkCodec {
                 let length = cmp::min(total - sent, self.out_chunk_size);
                 let (s, e) = self.add_chunk_header(msg, sent == 0, init)?;
                 self.io.write_all(&self.chunk_header_cache[s..e]).await?;
-                self.io.write_all(&msg.raw_data[sent..(sent + length)]).await?;
-                    
+                self.io
+                    .write_all(&msg.raw_data[sent..(sent + length)])
+                    .await?;
+
                 init = false;
                 sent += length;
                 if sent >= total {
@@ -255,19 +289,19 @@ impl ChunkCodec {
     }
 
     async fn read_basic_header(&mut self) -> Result<(u8, u32)> {
-        let head = self.io.read_u8().await?;
+        let head = self.read_safe(1).await?[0];
         let csid = head & 0x3f;
         let fmt = (head >> 6) & 0x03;
         if csid > 1 {
             Ok((fmt, csid as u32))
         } else if csid == 0 {
             let mut csid = 64_u32;
-            csid += self.io.read_u8().await? as u32;
+            csid += self.read_safe(1).await?[0] as u32;
             Ok((fmt, csid))
         } else {
             let mut csid = 64_u32;
-            csid += self.io.read_u8().await? as u32;
-            csid += self.io.read_u8().await? as u32 * 256;
+            csid += self.read_safe(1).await?[0] as u32;
+            csid += self.read_safe(1).await?[0] as u32 * 256;
             Ok((fmt, csid))
         }
     }
@@ -289,8 +323,9 @@ impl ChunkCodec {
 
         let mh_size = MH_SIZES[fmt as usize] as usize;
         let mut mh = BytesMut::with_capacity(mh_size);
-        mh.resize(mh_size, 0);
-        self.io.read_exact(&mut mh).await?;
+        // mh.resize(mh_size, 0);
+        // self.io.read_exact(&mut mh).await?;
+        mh.extend_from_slice(self.read_safe(mh_size).await?);
         if fmt <= RTMP_FMT_TYPE2 {
             chunk.header.timestamp_delta = Cursor::new(mh.split_to(3)).read_u24::<BigEndian>()?;
             chunk.extended_timestamp = chunk.header.timestamp_delta >= RTMP_EXTENDED_TIMESTAMP;
@@ -358,12 +393,14 @@ impl ChunkCodec {
         payload_size = cmp::min(payload_size, self.in_chunk_size);
 
         // create msg payload if not initialized
-        let mut buffer = Vec::<u8>::with_capacity(payload_size);
-        unsafe { buffer.set_len(payload_size) };
-        self.io.read_exact(&mut buffer).await?;
+        // let mut buffer = Vec::<u8>::with_capacity(payload_size);
+        // unsafe { buffer.set_len(payload_size) };
+        // self.io.read_exact(&mut buffer).await?;
 
         // read payload to buffer
-        chunk.payload.extend_from_slice(&buffer);
+        chunk
+            .payload
+            .extend_from_slice(self.read_safe(payload_size).await?);
 
         // got entire RTMP message?
         if chunk.header.payload_length == chunk.payload.len() {
@@ -384,6 +421,8 @@ impl ChunkCodec {
     }
 
     async fn recv_interlaced_message(&mut self) -> Result<Option<(Bytes, MessageHeader)>> {
+        self.cache.enter();
+
         let (fmt, csid) = self.read_basic_header().await?;
         let mut chunk = match self.chunk_streams.remove_entry(&csid) {
             Some((_, v)) => v,
@@ -407,6 +446,8 @@ impl ChunkCodec {
         let mh = chunk.header.clone();
         self.chunk_streams.insert(csid, chunk);
 
+        self.cache.leave();
+
         match payload {
             Ok(p) => match p {
                 Some(b) => Ok(Some((b, mh))),
@@ -414,6 +455,32 @@ impl ChunkCodec {
             },
             Err(e) => Err(e),
         }
+    }
+
+    async fn read_safe(&mut self, size: usize) -> Result<&[u8]> {
+        let end_pos = self.cache.read_pos + size;
+        if end_pos > self.cache.saved_btyes.len() {
+            self.cache
+                .saved_btyes
+                .reserve(end_pos - self.cache.saved_btyes.len());
+            unsafe { self.cache.saved_btyes.set_len(end_pos) };
+        }
+        if self.cache.unread_bytes() != 0 {
+            warn!("Lukie safe");
+        }
+        while self.cache.unread_bytes() < size {
+            let n = self
+                .io
+                .read(&mut self.cache.saved_btyes[self.cache.write_pos..end_pos])
+                .await?;
+            if n == 0 {
+                return Err(ChunkError::ConnectionClosed);
+            }
+            self.cache.write_pos += n;
+        }
+
+        self.cache.read_pos += size;
+        return Ok(&self.cache.saved_btyes[self.cache.read_pos - size..end_pos]);
     }
 }
 

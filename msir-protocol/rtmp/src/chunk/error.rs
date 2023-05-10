@@ -20,6 +20,9 @@ pub enum ChunkError {
     #[error("Not found extend-timestamp")]
     InvalidExTimestamp,
 
+    #[error("Read return 0")]
+    ConnectionClosed,
+
     #[error("Decode message failed: {0}")]
     DecodeMessageFailed(#[from] MessageDecodeError),
 
