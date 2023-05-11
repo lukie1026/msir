@@ -1,10 +1,6 @@
-use std::{
-    cmp,
-    io::Cursor,
-};
-
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{Buf, Bytes, BytesMut};
+use std::{cmp, io::Cursor};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufStream},
     net::TcpStream,
@@ -17,6 +13,8 @@ use self::{error::ChunkError, transport::Transport};
 
 pub mod error;
 pub mod transport;
+
+const PERF_CHUNK_STREAM_CACHE: u32 = 64;
 
 const RTMP_FMT_TYPE0: u8 = 0;
 const RTMP_FMT_TYPE1: u8 = 1;
@@ -104,7 +102,7 @@ pub struct ChunkCodec {
     in_chunk_size: usize,
     out_chunk_size: usize,
     // chunk_streams_map: HashMap<u32, ChunkStream>, // TODO: Performance
-    chunk_streams: [Option<ChunkStream>; 64],
+    chunk_streams: [Option<ChunkStream>; PERF_CHUNK_STREAM_CACHE as usize],
     chunk_header_cache: Vec<u8>,
 }
 
@@ -117,10 +115,10 @@ impl ChunkCodec {
             // chunk_streams_map: HashMap::new(),
             chunk_streams: [
                 None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-                None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-                None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-                None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-                None, None, None, None, None
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                None, None, None, None, None, None, None, None,
             ],
             chunk_header_cache: Vec::with_capacity(16 * 128),
         }
@@ -395,11 +393,16 @@ impl ChunkCodec {
             chunk.payload.len(),
             chunk.header.payload_length
         );
+        self.io.safe_guard();
+
         Ok(None)
     }
 
     async fn recv_interlaced_message(&mut self) -> Result<Option<(Bytes, MessageHeader)>> {
         let (fmt, csid) = self.read_basic_header().await?;
+        if csid >= PERF_CHUNK_STREAM_CACHE {
+            return Err(ChunkError::LargeCsid(csid));
+        }
         // let mut chunk = match self.chunk_streams.remove_entry(&csid) {
         //     Some((_, v)) => v,
         //     None => ChunkStream::new(csid),
@@ -411,6 +414,7 @@ impl ChunkCodec {
         let mh = self.read_message_header(csid, fmt).await?;
         trace!("Read message header, fmt={} csid={}", fmt, csid);
         let payload = self.read_message_payload(csid).await;
+        self.io.safe_flush();
         trace!("Read message payload, {:?}", payload);
         // let mh = chunk.header.clone();
         // self.chunk_streams.insert(csid, chunk);

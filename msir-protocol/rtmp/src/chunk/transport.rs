@@ -69,6 +69,9 @@ impl Transport {
     }
 
     pub fn safe_guard(&mut self) {
+        if self.real_read_pos - self.virtual_read_pos > 0 {
+            info!("Safe guard restore");
+        }
         self.real_read_pos = self.virtual_read_pos;
         self.safe = true;
     }
@@ -103,6 +106,11 @@ impl Transport {
     }
 
     fn buf_move_to_head(&mut self) {
+        info!(
+            "Readbuf moved, len={}, move={}",
+            self.write_pos - self.virtual_read_pos,
+            self.virtual_read_pos
+        );
         let mut new_buf = Vec::with_capacity(131072);
         new_buf.extend_from_slice(&self.buf[self.virtual_read_pos..self.write_pos]);
         unsafe { new_buf.set_len(131072) }
@@ -113,7 +121,16 @@ impl Transport {
         self.write_pos -= offset;
     }
 
+    fn buf_reset(&mut self) {
+        self.virtual_read_pos = 0;
+        self.real_read_pos = 0;
+        self.write_pos = 0;
+    }
+
     pub async fn read_exact(&mut self, size: usize) -> Result<&[u8]> {
+        if self.write_pos == self.virtual_read_pos {
+            self.buf_reset();
+        }
         while self.buf_len() < size {
             if self.buf_left() + self.buf_len() < size {
                 self.buf_move_to_head();
@@ -123,7 +140,7 @@ impl Transport {
                 n => self.write_pos += n,
             }
         }
-        self.send_bytes += size as u64;
+        self.recv_bytes += size as u64;
         self.real_read_pos += size;
         if !self.safe {
             self.virtual_read_pos = self.real_read_pos;

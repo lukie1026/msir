@@ -31,6 +31,9 @@ pub enum ChunkError {
     #[error("Transport IO: {0}")]
     TransportIO(#[from] TransportError),
 
+    #[error("Rtmp csid is large than 64, csid={0}")]
+    LargeCsid(u32),
+
     // Failed to read the values
     #[error("An IO error occurred: {0}")]
     Io(#[from] io::Error),
