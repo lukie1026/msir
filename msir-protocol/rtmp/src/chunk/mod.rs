@@ -101,7 +101,7 @@ impl ChunkStream {
 
 pub struct ChunkCodec {
     // use BufStream to improve io performance
-    io: BufStream<TcpStream>,
+    io: Transport,
     in_chunk_size: usize,
     out_chunk_size: usize,
     // chunk_streams_map: HashMap<u32, ChunkStream>, // TODO: Performance
@@ -112,7 +112,7 @@ pub struct ChunkCodec {
 impl ChunkCodec {
     pub fn new(io: TcpStream) -> Self {
         Self {
-            io: BufStream::with_capacity(131072, 131072, io),
+            io: Transport::new(io),
             in_chunk_size: 128,
             out_chunk_size: 128,
             // chunk_streams_map: HashMap::new(),
