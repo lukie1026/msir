@@ -100,30 +100,30 @@ impl Transport {
         }
     }
 
-    // pub async fn read_exact(&mut self, buf: &mut [u8]) -> Result<usize> {
-    //     if self.recv_timeout == NOTIMEOUT {
-    //         Ok(self.io.read_exact(buf).await.and_then(|ret| {
-    //             self.recv_bytes += ret as u64;
-    //             Ok(ret)
-    //         })?)
-    //     } else {
-    //         Ok(timeout(self.recv_timeout, self.io.read_exact(buf))
-    //             .await?
-    //             .and_then(|ret| {
-    //                 self.recv_bytes += ret as u64;
-    //                 Ok(ret)
-    //             })?)
-    //     }
-    // }
-
     pub async fn read_exact(&mut self, buf: &mut [u8]) -> Result<usize> {
-        let mut nread = 0;
-        while nread < buf.len() {
-            nread += self.io.read(&mut buf[nread..]).await?;
-            self.recv_bytes += nread as u64;
+        if self.recv_timeout == NOTIMEOUT {
+            Ok(self.io.read_exact(buf).await.and_then(|ret| {
+                self.recv_bytes += ret as u64;
+                Ok(ret)
+            })?)
+        } else {
+            Ok(timeout(self.recv_timeout, self.io.read_exact(buf))
+                .await?
+                .and_then(|ret| {
+                    self.recv_bytes += ret as u64;
+                    Ok(ret)
+                })?)
         }
-        Ok(nread)
     }
+
+    // pub async fn read_exact(&mut self, buf: &mut [u8]) -> Result<usize> {
+    //     let mut nread = 0;
+    //     while nread < buf.len() {
+    //         nread += self.io.read(&mut buf[nread..]).await?;
+    //         self.recv_bytes += nread as u64;
+    //     }
+    //     Ok(nread)
+    // }
 
     pub async fn write_all(&mut self, buf: &[u8]) -> Result<()> {
         if self.send_timeout == NOTIMEOUT {

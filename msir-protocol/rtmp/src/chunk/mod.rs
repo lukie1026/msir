@@ -14,7 +14,7 @@ use tracing::{error, info, instrument, trace, warn};
 
 use crate::message::{decode, types::msg_type::*, RtmpMessage, RtmpPayload};
 
-use self::error::ChunkError;
+use self::{error::ChunkError, transport::Transport};
 
 pub mod error;
 pub mod transport;
@@ -104,7 +104,8 @@ pub struct ChunkCodec {
     io: BufStream<TcpStream>,
     in_chunk_size: usize,
     out_chunk_size: usize,
-    chunk_streams: HashMap<u32, ChunkStream>, // TODO: Performance
+    // chunk_streams_map: HashMap<u32, ChunkStream>, // TODO: Performance
+    chunk_streams: [Option<ChunkStream>; 16],
     chunk_header_cache: Vec<u8>,
 }
 
@@ -114,7 +115,11 @@ impl ChunkCodec {
             io: BufStream::with_capacity(131072, 131072, io),
             in_chunk_size: 128,
             out_chunk_size: 128,
-            chunk_streams: HashMap::new(),
+            // chunk_streams_map: HashMap::new(),
+            chunk_streams: [
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                None, None,
+            ],
             chunk_header_cache: Vec::with_capacity(16 * 128),
         }
     }
@@ -276,7 +281,8 @@ impl ChunkCodec {
     }
 
     async fn read_message_header(&mut self, csid: u32, fmt: u8) -> Result<MessageHeader> {
-        let chunk = self.chunk_streams.get_mut(&csid).unwrap();
+        // let chunk = self.chunk_streams.get_mut(&csid).unwrap();
+        let chunk = self.chunk_streams[csid as usize].as_mut().unwrap();
         let first_chunk_of_msg = chunk.payload.len() == 0;
         if chunk.msg_count == 0 && fmt != RTMP_FMT_TYPE0 {
             if fmt == RTMP_FMT_TYPE1 {
@@ -348,7 +354,8 @@ impl ChunkCodec {
     }
 
     async fn read_message_payload(&mut self, csid: u32) -> Result<Option<Bytes>> {
-        let chunk = self.chunk_streams.get_mut(&csid).unwrap();
+        // let chunk = self.chunk_streams.get_mut(&csid).unwrap();
+        let chunk = self.chunk_streams[csid as usize].as_mut().unwrap();
         // empty message
         if chunk.header.payload_length <= 0 {
             trace!(
@@ -394,8 +401,8 @@ impl ChunkCodec {
         //     Some((_, v)) => v,
         //     None => ChunkStream::new(csid),
         // };
-        if let None = self.chunk_streams.get(&csid) {
-            self.chunk_streams.insert(csid, ChunkStream::new(csid));
+        if let None = self.chunk_streams[csid as usize] {
+            self.chunk_streams[csid as usize] = Some(ChunkStream::new(csid));
         }
         trace!("Read basic header, fmt={} csid={}", fmt, csid,);
         let mh = self.read_message_header(csid, fmt).await?;
