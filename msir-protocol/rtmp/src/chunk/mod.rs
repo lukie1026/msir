@@ -10,7 +10,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufStream},
     net::TcpStream,
 };
-use tracing::{error, info, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::message::{decode, types::msg_type::*, RtmpMessage, RtmpPayload};
 
@@ -73,7 +73,7 @@ impl Default for MessageHeader {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ChunkStream {
     fmt: u8,
     csid: u32,
@@ -362,7 +362,10 @@ impl ChunkCodec {
 
         // read extended-timestamp
         if chunk.extended_timestamp {
-            let timestamp = self.io.read_u32().await?;
+            let mut ts = BytesMut::with_capacity(4);
+            ts.extend_from_slice(self.read_safe(4).await?);
+            let timestamp = ReadBytesExt::read_u32::<BigEndian>(&mut Cursor::new(ts))?;
+            // let timestamp = self.io.read_u32().await?;
             if !first_chunk_of_msg
                 && chunk.header.timestamp > 0
                 && timestamp != chunk.header.timestamp
@@ -424,25 +427,15 @@ impl ChunkCodec {
         self.cache.enter();
 
         let (fmt, csid) = self.read_basic_header().await?;
-        let mut chunk = match self.chunk_streams.remove_entry(&csid) {
-            Some((_, v)) => v,
-            None => ChunkStream::new(csid),
-        };
-        trace!(
-            "Read basic header, fmt={} csid={}, chunk{:?}",
-            fmt,
-            csid,
-            chunk
-        );
+        if let None = self.chunk_streams.get_mut(&csid) {
+            self.chunk_streams.insert(csid, ChunkStream::new(csid));
+        }
+        let mut chunk = self.chunk_streams.get_mut(&csid).unwrap().clone();
+        trace!("Read basic header, fmt={} csid={}", fmt, csid,);
         self.read_message_header(&mut chunk, fmt).await?;
-        trace!(
-            "Read message header, fmt={} csid={}, chunk{:?}",
-            fmt,
-            csid,
-            chunk
-        );
+        trace!("Read message header, fmt={} csid={}", fmt, csid);
         let payload = self.read_message_payload(&mut chunk).await;
-        trace!("Read message payload, {:?}", payload);
+        trace!("Read message payload");
         let mh = chunk.header.clone();
         self.chunk_streams.insert(csid, chunk);
 
@@ -466,7 +459,7 @@ impl ChunkCodec {
             unsafe { self.cache.saved_btyes.set_len(end_pos) };
         }
         if self.cache.unread_bytes() != 0 {
-            warn!("Lukie safe");
+            debug!("Lukie safe");
         }
         while self.cache.unread_bytes() < size {
             let n = self
