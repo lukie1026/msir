@@ -393,12 +393,13 @@ impl ChunkCodec {
             chunk.payload.len(),
             chunk.header.payload_length
         );
-        self.io.safe_guard();
 
         Ok(None)
     }
 
     async fn recv_interlaced_message(&mut self) -> Result<Option<(Bytes, MessageHeader)>> {
+        self.io.safe_guard();
+
         let (fmt, csid) = self.read_basic_header().await?;
         if csid >= PERF_CHUNK_STREAM_CACHE {
             return Err(ChunkError::LargeCsid(csid));
@@ -414,10 +415,11 @@ impl ChunkCodec {
         let mh = self.read_message_header(csid, fmt).await?;
         trace!("Read message header, fmt={} csid={}", fmt, csid);
         let payload = self.read_message_payload(csid).await;
-        self.io.safe_flush();
         trace!("Read message payload, {:?}", payload);
         // let mh = chunk.header.clone();
         // self.chunk_streams.insert(csid, chunk);
+
+        self.io.safe_flush();
 
         match payload {
             Ok(p) => match p {
