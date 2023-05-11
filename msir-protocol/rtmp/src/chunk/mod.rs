@@ -1,7 +1,6 @@
 use std::{
     cmp,
-    collections::HashMap,
-    io::{Cursor, IoSlice},
+    io::Cursor,
 };
 
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -105,7 +104,7 @@ pub struct ChunkCodec {
     in_chunk_size: usize,
     out_chunk_size: usize,
     // chunk_streams_map: HashMap<u32, ChunkStream>, // TODO: Performance
-    chunk_streams: [Option<ChunkStream>; 16],
+    chunk_streams: [Option<ChunkStream>; 64],
     chunk_header_cache: Vec<u8>,
 }
 
@@ -118,7 +117,10 @@ impl ChunkCodec {
             // chunk_streams_map: HashMap::new(),
             chunk_streams: [
                 None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-                None, None,
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                None, None, None, None, None
             ],
             chunk_header_cache: Vec::with_capacity(16 * 128),
         }
