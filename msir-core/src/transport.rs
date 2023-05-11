@@ -125,9 +125,16 @@ impl Transport {
             if self.buf_left() + self.buf_len() < size {
                 self.buf_move_to_head();
             }
-            match self.io.read(&mut self.buf[self.write_pos..]).await? {
-                0 => return Err(TransportError::EndOfFile),
-                n => self.write_pos += n,
+            if self.recv_timeout == NOTIMEOUT {
+                match self.io.read(&mut self.buf[self.write_pos..]).await? {
+                    0 => return Err(TransportError::EndOfFile),
+                    n => self.write_pos += n,
+                }
+            } else {
+                match timeout(self.send_timeout, self.io.read(&mut self.buf[self.write_pos..])).await?? {
+                    0 => return Err(TransportError::EndOfFile),
+                    n => self.write_pos += n,
+                }
             }
         }
         self.recv_bytes += size as u64;
