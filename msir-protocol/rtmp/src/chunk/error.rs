@@ -3,6 +3,8 @@ use thiserror::Error;
 
 use crate::message::error::{MessageDecodeError, MessageEncodeError};
 
+use super::transport::TransportError;
+
 #[derive(Debug, Error)]
 pub enum ChunkError {
     // Invalid fmt
@@ -25,6 +27,9 @@ pub enum ChunkError {
 
     #[error("Encode message failed: {0}")]
     EncodeMessageFailed(#[from] MessageEncodeError),
+
+    #[error("Transport IO: {0}")]
+    TransportIO(#[from] TransportError),
 
     // Failed to read the values
     #[error("An IO error occurred: {0}")]

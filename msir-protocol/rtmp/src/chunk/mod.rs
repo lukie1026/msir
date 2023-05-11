@@ -17,6 +17,7 @@ use crate::message::{decode, types::msg_type::*, RtmpMessage, RtmpPayload};
 use self::error::ChunkError;
 
 pub mod error;
+pub mod transport;
 
 const RTMP_FMT_TYPE0: u8 = 0;
 const RTMP_FMT_TYPE1: u8 = 1;
@@ -199,8 +200,10 @@ impl ChunkCodec {
                 let length = cmp::min(total - sent, self.out_chunk_size);
                 let (s, e) = self.add_chunk_header(msg, sent == 0, init)?;
                 self.io.write_all(&self.chunk_header_cache[s..e]).await?;
-                self.io.write_all(&msg.raw_data[sent..(sent + length)]).await?;
-                    
+                self.io
+                    .write_all(&msg.raw_data[sent..(sent + length)])
+                    .await?;
+
                 init = false;
                 sent += length;
                 if sent >= total {
@@ -272,7 +275,8 @@ impl ChunkCodec {
         }
     }
 
-    async fn read_message_header(&mut self, chunk: &mut ChunkStream, fmt: u8) -> Result<()> {
+    async fn read_message_header(&mut self, csid: u32, fmt: u8) -> Result<MessageHeader> {
+        let chunk = self.chunk_streams.get_mut(&csid).unwrap();
         let first_chunk_of_msg = chunk.payload.len() == 0;
         if chunk.msg_count == 0 && fmt != RTMP_FMT_TYPE0 {
             if fmt == RTMP_FMT_TYPE1 {
@@ -340,10 +344,11 @@ impl ChunkCodec {
         chunk.header.timestamp &= 0x7fffffff;
 
         chunk.msg_count += 1;
-        Ok(())
+        Ok(chunk.header.clone())
     }
 
-    async fn read_message_payload(&mut self, chunk: &mut ChunkStream) -> Result<Option<Bytes>> {
+    async fn read_message_payload(&mut self, csid: u32) -> Result<Option<Bytes>> {
+        let chunk = self.chunk_streams.get_mut(&csid).unwrap();
         // empty message
         if chunk.header.payload_length <= 0 {
             trace!(
@@ -385,27 +390,20 @@ impl ChunkCodec {
 
     async fn recv_interlaced_message(&mut self) -> Result<Option<(Bytes, MessageHeader)>> {
         let (fmt, csid) = self.read_basic_header().await?;
-        let mut chunk = match self.chunk_streams.remove_entry(&csid) {
-            Some((_, v)) => v,
-            None => ChunkStream::new(csid),
-        };
-        trace!(
-            "Read basic header, fmt={} csid={}, chunk{:?}",
-            fmt,
-            csid,
-            chunk
-        );
-        self.read_message_header(&mut chunk, fmt).await?;
-        trace!(
-            "Read message header, fmt={} csid={}, chunk{:?}",
-            fmt,
-            csid,
-            chunk
-        );
-        let payload = self.read_message_payload(&mut chunk).await;
+        // let mut chunk = match self.chunk_streams.remove_entry(&csid) {
+        //     Some((_, v)) => v,
+        //     None => ChunkStream::new(csid),
+        // };
+        if let None = self.chunk_streams.get(&csid) {
+            self.chunk_streams.insert(csid, ChunkStream::new(csid));
+        }
+        trace!("Read basic header, fmt={} csid={}", fmt, csid,);
+        let mh = self.read_message_header(csid, fmt).await?;
+        trace!("Read message header, fmt={} csid={}", fmt, csid);
+        let payload = self.read_message_payload(csid).await;
         trace!("Read message payload, {:?}", payload);
-        let mh = chunk.header.clone();
-        self.chunk_streams.insert(csid, chunk);
+        // let mh = chunk.header.clone();
+        // self.chunk_streams.insert(csid, chunk);
 
         match payload {
             Ok(p) => match p {
