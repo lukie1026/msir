@@ -3,8 +3,8 @@ use crate::{
     message::{types::*, RtmpMessage},
 };
 
+use msir_core::transport::Transport;
 use std::collections::HashMap;
-use tokio::net::TcpStream;
 use tracing::{error, info, trace, warn};
 
 use super::error::ConnectionError;
@@ -24,7 +24,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(io: TcpStream) -> Self {
+    pub fn new(io: Transport) -> Self {
         Self {
             chunk_io: ChunkCodec::new(io),
             // requests: HashMap::new(),

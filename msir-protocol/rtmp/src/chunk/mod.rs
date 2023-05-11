@@ -1,18 +1,15 @@
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{Buf, Bytes, BytesMut};
+use msir_core::transport::Transport;
 use std::{cmp, io::Cursor};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, BufStream},
-    net::TcpStream,
-};
+use tokio::net::TcpStream;
 use tracing::{error, info, instrument, trace, warn};
 
 use crate::message::{decode, types::msg_type::*, RtmpMessage, RtmpPayload};
 
-use self::{error::ChunkError, transport::Transport};
+use self::error::ChunkError;
 
 pub mod error;
-pub mod transport;
 
 const PERF_CHUNK_STREAM_CACHE: u32 = 64;
 
@@ -97,7 +94,6 @@ impl ChunkStream {
 }
 
 pub struct ChunkCodec {
-    // use BufStream to improve io performance
     io: Transport,
     in_chunk_size: usize,
     out_chunk_size: usize,
@@ -107,9 +103,9 @@ pub struct ChunkCodec {
 }
 
 impl ChunkCodec {
-    pub fn new(io: TcpStream) -> Self {
+    pub fn new(io: Transport) -> Self {
         Self {
-            io: Transport::new(io),
+            io,
             in_chunk_size: 128,
             out_chunk_size: 128,
             // chunk_streams_map: HashMap::new(),

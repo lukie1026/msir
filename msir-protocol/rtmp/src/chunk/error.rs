@@ -1,9 +1,7 @@
+use crate::message::error::{MessageDecodeError, MessageEncodeError};
+use msir_core::transport::TransportError;
 use std::io;
 use thiserror::Error;
-
-use crate::message::error::{MessageDecodeError, MessageEncodeError};
-
-use super::transport::TransportError;
 
 #[derive(Debug, Error)]
 pub enum ChunkError {

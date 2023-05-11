@@ -1,26 +1,16 @@
-use bytes::{Buf, Bytes, BytesMut};
-use std::{
-    io::{self, Cursor},
-    time::Duration,
-};
+use std::{io, time::Duration};
 use thiserror::Error;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufStream},
     net::TcpStream,
     time::{error::Elapsed, timeout},
 };
-use tracing::{error, info, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 pub static NOTIMEOUT: Duration = Duration::MAX;
 
 #[derive(Debug, Error)]
 pub enum TransportError {
-    #[error("Read buffer has no space")]
-    BufNoSpace,
-
-    #[error("Read unexpected EOF")]
-    ReadUnexpectedEof,
-
     #[error("End of file")]
     EndOfFile,
 
@@ -70,7 +60,7 @@ impl Transport {
 
     pub fn safe_guard(&mut self) {
         if self.real_read_pos - self.virtual_read_pos > 0 {
-            info!("Safe guard restore");
+            debug!("Safe guard restore");
         }
         self.real_read_pos = self.virtual_read_pos;
         self.safe = true;
@@ -106,7 +96,7 @@ impl Transport {
     }
 
     fn buf_move_to_head(&mut self) {
-        info!(
+        debug!(
             "Readbuf moved, len={}, move={}",
             self.write_pos - self.virtual_read_pos,
             self.virtual_read_pos
@@ -157,63 +147,6 @@ impl Transport {
         Ok((v[0] as u32) << 24 | (v[1] as u32) << 16 | (v[2] as u32) << 8 | (v[3] as u32))
     }
 
-    // pub async fn read_u8(&mut self) -> Result<u8> {
-    //     if self.recv_timeout == NOTIMEOUT {
-    //         Ok(self.io.read_u8().await.and_then(|ret| {
-    //             self.recv_bytes += 1;
-    //             Ok(ret)
-    //         })?)
-    //     } else {
-    //         Ok(timeout(self.recv_timeout, self.io.read_u8())
-    //             .await?
-    //             .and_then(|ret| {
-    //                 self.recv_bytes += 1;
-    //                 Ok(ret)
-    //             })?)
-    //     }
-    // }
-
-    // pub async fn read_u32(&mut self) -> Result<u32> {
-    //     if self.recv_timeout == NOTIMEOUT {
-    //         Ok(self.io.read_u32().await.and_then(|ret| {
-    //             self.recv_bytes += 4;
-    //             Ok(ret)
-    //         })?)
-    //     } else {
-    //         Ok(timeout(self.recv_timeout, self.io.read_u32())
-    //             .await?
-    //             .and_then(|ret| {
-    //                 self.recv_bytes += 4;
-    //                 Ok(ret)
-    //             })?)
-    //     }
-    // }
-
-    // pub async fn read_exact(&mut self, buf: &mut [u8]) -> Result<usize> {
-    //     if self.recv_timeout == NOTIMEOUT {
-    //         Ok(self.io.read_exact(buf).await.and_then(|ret| {
-    //             self.recv_bytes += ret as u64;
-    //             Ok(ret)
-    //         })?)
-    //     } else {
-    //         Ok(timeout(self.recv_timeout, self.io.read_exact(buf))
-    //             .await?
-    //             .and_then(|ret| {
-    //                 self.recv_bytes += ret as u64;
-    //                 Ok(ret)
-    //             })?)
-    //     }
-    // }
-
-    // pub async fn read_exact(&mut self, buf: &mut [u8]) -> Result<usize> {
-    //     let mut nread = 0;
-    //     while nread < buf.len() {
-    //         nread += self.io.read(&mut buf[nread..]).await?;
-    //         self.recv_bytes += nread as u64;
-    //     }
-    //     Ok(nread)
-    // }
-
     pub async fn write_all(&mut self, buf: &[u8]) -> Result<()> {
         if self.send_timeout == NOTIMEOUT {
             Ok(self.io.write_all(buf).await.and_then(|ret| {
@@ -233,39 +166,4 @@ impl Transport {
     pub async fn flush(&mut self) -> Result<()> {
         Ok(self.io.flush().await?)
     }
-
-    // pub async fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-    //     if buf.len() == 0 {
-    //         return Err(TransportError::BufNoSpace);
-    //     }
-    //     let nread;
-    //     if self.recv_timeout == NOTIMEOUT {
-    //         nread = self.io.read(buf).await?;
-    //     } else {
-    //         nread = timeout(self.recv_timeout, self.io.read(buf)).await??
-    //     }
-
-    //     if nread == 0 {
-    //         return Err(TransportError::ReadUnexpectedEof)
-    //     }
-    //     self.recv_bytes += nread as u64;
-    //     Ok(nread)
-    // }
-
-    // pub async fn write_all(&mut self, data: &[u8]) -> Result<()> {
-    //     let mut buf = Cursor::new(data);
-    //     if self.send_timeout == NOTIMEOUT {
-    //         Ok(self.io.write_all_buf(&mut buf).await.and_then(|ret| {
-    //             self.send_bytes += data.len() as u64;
-    //             Ok(ret)
-    //         })?)
-    //     } else {
-    //         Ok(timeout(self.send_timeout, self.io.write_all_buf(&mut buf))
-    //             .await?
-    //             .and_then(|ret| {
-    //                 self.send_bytes += data.len() as u64;
-    //                 Ok(ret)
-    //             })?)
-    //     }
-    // }
 }

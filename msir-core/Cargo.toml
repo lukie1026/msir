@@ -1,14 +1,11 @@
 [package]
-name = "msir-service"
+name = "msir-core"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-msir-core = { path = "../msir-core" }
-rtmp = { path = "../msir-protocol/rtmp" }
+tokio = { version = "1.28.0", features = ["full"]}
 thiserror = "1.0.40"
 tracing = "0.1.38"
-tokio = { version = "1.28.0", features = ["full"]}
-uuid = { version = "1.3.2", features = ["v4"] }

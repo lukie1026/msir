@@ -1,3 +1,4 @@
+use msir_core::transport::Transport;
 use rml_amf0::Amf0Value;
 use tokio::net::TcpStream;
 use tracing::{info, trace, warn};
@@ -22,7 +23,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub async fn new(mut io: TcpStream) -> Result<Self, ConnectionError> {
+    pub async fn new(mut io: Transport) -> Result<Self, ConnectionError> {
         let mut hs = handshake::Server::new();
         hs.handshake(&mut io).await?;
         Ok(Self {
