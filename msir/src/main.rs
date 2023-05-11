@@ -25,6 +25,7 @@
 use msir_core::transport::Transport;
 use msir_service::rtmp_service::RtmpService;
 use msir_service::stream::{Manager, StreamEvent};
+use msir_service::utils;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::signal;
 use tokio::sync::mpsc;
@@ -35,7 +36,6 @@ use futures::FutureExt;
 use std::error::Error;
 use std::time::Duration;
 use std::{env, io};
-use uuid::Uuid;
 
 //#[tokio::main(worker_threads = 8)]
 #[tokio::main(flavor = "current_thread")]
@@ -86,16 +86,14 @@ async fn rtmp_server_start(tx: mpsc::UnboundedSender<StreamEvent>) -> Result<(),
     let listener = TcpListener::bind(listen_addr).await?;
 
     while let Ok((inbound, _)) = listener.accept().await {
-        let uid = Uuid::new_v4();
-        let rtmp_service = rtmp_service(inbound, uid, tx.clone()).map(|r| {
+        let uid = utils::gen_uid();
+        let rtmp_service = rtmp_service(inbound, uid.clone(), tx.clone()).map(|r| {
             if let Err(e) = r {
                 error!("Failed to transfer; error={}", e);
             }
         });
 
-        tokio::spawn(
-            rtmp_service.instrument(tracing::info_span!("RTMP-CONN", uid = uid.to_string())),
-        );
+        tokio::spawn(rtmp_service.instrument(tracing::info_span!("RTMP-CONN", uid)));
     }
 
     Ok(())
@@ -104,7 +102,7 @@ async fn rtmp_server_start(tx: mpsc::UnboundedSender<StreamEvent>) -> Result<(),
 // #[instrument]
 async fn rtmp_service(
     inbound: TcpStream,
-    uid: Uuid,
+    uid: String,
     tx: mpsc::UnboundedSender<StreamEvent>,
 ) -> Result<(), Box<dyn Error>> {
     RtmpService::new(Transport::new(inbound), Some(uid))

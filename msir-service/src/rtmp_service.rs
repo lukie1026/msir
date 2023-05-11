@@ -1,6 +1,7 @@
 use crate::{
     error::ServiceError,
     stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
+    utils,
 };
 use msir_core::transport::Transport;
 use rtmp::connection::RtmpConnType;
@@ -10,17 +11,16 @@ use rtmp::message::RtmpMessage;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, trace, warn};
-use uuid::Uuid;
 
 pub struct RtmpService {
-    uid: Uuid,
+    uid: String,
     rtmp: rtmp_conn::Server,
 }
 
 impl RtmpService {
-    pub async fn new(io: Transport, uid: Option<Uuid>) -> Result<Self, ServiceError> {
+    pub async fn new(io: Transport, uid: Option<String>) -> Result<Self, ServiceError> {
         let rtmp = rtmp_conn::Server::new(io).await?;
-        let uid = uid.unwrap_or_else(|| Uuid::new_v4());
+        let uid = uid.unwrap_or_else(|| utils::gen_uid());
         Ok(Self { uid, rtmp })
     }
     pub async fn run(
@@ -80,7 +80,7 @@ impl RtmpService {
         };
         let (reg_tx, reg_rx) = oneshot::channel();
         let msg = StreamEvent::Register(RegisterEv {
-            uid: self.uid,
+            uid: self.uid.clone(),
             stream_key,
             role,
             ret: reg_tx,
@@ -112,7 +112,7 @@ impl RtmpService {
             false => RoleType::Consumer,
         };
         let msg = StreamEvent::Unregister(UnregisterEv {
-            uid: self.uid,
+            uid: self.uid.clone(),
             stream_key,
             role,
         });

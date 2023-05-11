@@ -3,13 +3,12 @@ use std::collections::HashMap;
 use rtmp::{codec, message::RtmpMessage};
 use tokio::sync::mpsc;
 use tracing::{info, warn};
-use uuid::Uuid;
 
 use super::{error::StreamError, gop::GopCache};
 
 pub enum HubEvent {
-    ComsumerJoin(Uuid, mpsc::UnboundedSender<RtmpMessage>),
-    ComsumerLeave(Uuid),
+    ComsumerJoin(String, mpsc::UnboundedSender<RtmpMessage>),
+    ComsumerLeave(String),
 }
 
 #[derive(Debug, Default)]
@@ -24,7 +23,7 @@ pub struct Hub {
     meta: MetaCache,
     pub gop: GopCache,
     pub receiver: mpsc::UnboundedReceiver<HubEvent>,
-    pub comsumers: HashMap<Uuid, mpsc::UnboundedSender<RtmpMessage>>,
+    pub comsumers: HashMap<String, mpsc::UnboundedSender<RtmpMessage>>,
 }
 
 impl Hub {

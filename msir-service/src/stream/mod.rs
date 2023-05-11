@@ -6,7 +6,6 @@ use rtmp::message::RtmpMessage;
 use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info, warn};
-use uuid::Uuid;
 
 pub mod error;
 pub mod gop;
@@ -27,14 +26,14 @@ pub enum Token {
 
 #[derive(Debug)]
 pub struct RegisterEv {
-    pub uid: Uuid,
+    pub uid: String,
     pub role: RoleType,
     pub stream_key: String,
     pub ret: oneshot::Sender<Token>,
 }
 
 pub struct UnregisterEv {
-    pub uid: Uuid,
+    pub uid: String,
     pub role: RoleType,
     pub stream_key: String,
 }
