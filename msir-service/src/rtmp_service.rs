@@ -1,5 +1,6 @@
 use crate::{
     error::ServiceError,
+    statistic::{ConnStat, StatEvent, Statistic},
     stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
     utils,
 };
@@ -26,6 +27,7 @@ impl RtmpService {
     pub async fn run(
         &mut self,
         mgr_tx: mpsc::UnboundedSender<StreamEvent>,
+        stat_tx: mpsc::UnboundedSender<StatEvent>,
     ) -> Result<(), ServiceError> {
         loop {
             // connect with client and identify conn type
@@ -46,13 +48,13 @@ impl RtmpService {
                 }
                 _ => {}
             }
-            let token = self.register(&mgr_tx, &req).await?;
+            let token = self.register(&mgr_tx, &stat_tx, &req).await?;
             debug!("Register to hub");
             let ret = match req.conn_type.is_publish() {
                 true => self.publishing(&req, token).await,
                 false => self.playing(&req, token).await,
             };
-            self.unregister(&mgr_tx, &req).await;
+            self.unregister(&mgr_tx, &stat_tx, &req).await;
             debug!("Unegister to hub");
             match ret? {
                 Some(act) => match act {
@@ -67,6 +69,7 @@ impl RtmpService {
     async fn register(
         &mut self,
         mgr_tx: &mpsc::UnboundedSender<StreamEvent>,
+        stat_tx: &mpsc::UnboundedSender<StatEvent>,
         req: &Request,
     ) -> Result<Token, ServiceError> {
         let stream_key = req.app_stream();
@@ -77,7 +80,7 @@ impl RtmpService {
         let (reg_tx, reg_rx) = oneshot::channel();
         let msg = StreamEvent::Register(RegisterEv {
             uid: self.uid.clone(),
-            stream_key,
+            stream_key: stream_key.clone(),
             role,
             ret: reg_tx,
         });
@@ -92,7 +95,10 @@ impl RtmpService {
                 if let Token::Failure(e) = token {
                     return Err(ServiceError::RegisterFailed(e.to_string()));
                 }
-                // self.token = Some(token);
+                let _ = stat_tx.send(StatEvent::CreateConn(
+                    self.uid.clone(),
+                    ConnStat::new(stream_key, req.conn_type.clone()),
+                ));
                 Ok(token)
             }
             Err(_) => Err(ServiceError::RegisterFailed(
@@ -101,7 +107,12 @@ impl RtmpService {
         }
     }
 
-    async fn unregister(&mut self, mgr_tx: &mpsc::UnboundedSender<StreamEvent>, req: &Request) {
+    async fn unregister(
+        &mut self,
+        mgr_tx: &mpsc::UnboundedSender<StreamEvent>,
+        stat_tx: &mpsc::UnboundedSender<StatEvent>,
+        req: &Request,
+    ) {
         let stream_key = req.app_stream();
         let role = match req.conn_type.is_publish() {
             true => RoleType::Producer,
@@ -109,12 +120,17 @@ impl RtmpService {
         };
         let msg = StreamEvent::Unregister(UnregisterEv {
             uid: self.uid.clone(),
-            stream_key,
+            stream_key: stream_key.clone(),
             role,
         });
         if let Err(e) = mgr_tx.send(msg) {
             warn!("send unregister event failed: {}", e);
         }
+        // TODO: add stats
+        let _ = stat_tx.send(StatEvent::DeleteConn(
+            self.uid.clone(),
+            ConnStat::new(stream_key, req.conn_type.clone()),
+        ));
     }
 
     async fn playing(

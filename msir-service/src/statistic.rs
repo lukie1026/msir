@@ -1,7 +1,8 @@
 use msir_core::utils;
 use rtmp::connection::RtmpConnType;
 use std::collections::HashMap;
-use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tracing::info;
 
 pub enum StatEvent {
     CreateConn(String, ConnStat),
@@ -10,28 +11,21 @@ pub enum StatEvent {
 }
 
 pub struct Statistic {
-    tx: mpsc::UnboundedSender<StatEvent>,
     rx: mpsc::UnboundedReceiver<StatEvent>,
     conns: HashMap<String, ConnStat>,
     streams: HashMap<String, StreamStat>,
 }
 
 impl Statistic {
-    pub fn new() -> Self {
-        let (tx, rx) = mpsc::unbounded_channel::<StatEvent>();
+    pub fn new(rx: UnboundedReceiver<StatEvent>) -> Self {
         Self {
             rx,
-            tx,
             conns: HashMap::new(),
             streams: HashMap::new(),
         }
     }
 
-    pub fn tx(&mut self) -> UnboundedSender<StatEvent> {
-        self.tx.clone()
-    }
-
-    pub async fn run(&mut self) {
+    pub async fn run(mut self) {
         while let Some(ev) = self.rx.recv().await {
             match ev {
                 StatEvent::CreateConn(uid, cs) => self.on_create_conn(uid, cs),
@@ -42,12 +36,14 @@ impl Statistic {
     }
 
     fn on_create_conn(&mut self, uid: String, stat: ConnStat) {
-        let conn = self.conns.insert(uid, stat).unwrap();
+        let stream_key = stat.stream_key.clone();
+        let conn_type = stat.conn_type.clone();
+        self.conns.insert(uid, stat);
         // TODO: RemoteIngester need to first call than player
         let stream = self
             .streams
-            .entry(conn.stream_key.clone())
-            .or_insert(StreamStat::new(utils::current_time(), conn.conn_type));
+            .entry(stream_key)
+            .or_insert(StreamStat::new(utils::current_time(), conn_type));
         stream.clients += 1;
     }
 
@@ -93,6 +89,7 @@ impl Statistic {
     }
 }
 
+#[derive(Debug)]
 pub struct StreamStat {
     audio: u64,
     video: u64,
@@ -117,6 +114,7 @@ impl StreamStat {
     }
 }
 
+#[derive(Debug)]
 pub struct ConnStat {
     conn_time: u32,
     stream_key: String,

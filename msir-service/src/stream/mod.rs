@@ -56,7 +56,7 @@ impl Manager {
         }
     }
 
-    pub async fn run(&mut self) -> Result<(), StreamError> {
+    pub async fn run(mut self) -> Result<(), StreamError> {
         info!("Straem Manager daemon start...");
         while let Some(ev) = self.receiver.recv().await {
             match ev {

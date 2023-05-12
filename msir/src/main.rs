@@ -1,20 +1,15 @@
-#![warn(rust_2018_idioms)]
-
-use msir_core::transport::Transport;
-use msir_service::rtmp_service::RtmpService;
-use msir_service::statistic::Statistic;
+use crate::rtmp_server::rtmp_server_start;
+use msir_service::statistic::{StatEvent, Statistic};
 use msir_service::stream::{Manager, StreamEvent};
-use msir_service::utils;
-use tokio::net::{TcpListener, TcpStream};
+use std::error::Error;
+use std::io;
+use std::time::Duration;
 use tokio::signal;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, UnboundedSender};
 use tracing::{debug, error, info, info_span, instrument, trace, Instrument};
 use tracing_subscriber;
 
-use futures::FutureExt;
-use std::error::Error;
-use std::time::Duration;
-use std::{env, io};
+mod rtmp_server;
 
 //#[tokio::main(worker_threads = 8)]
 #[tokio::main(flavor = "current_thread")]
@@ -29,66 +24,39 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_ansi(false) // disable color if write to file
         .init();
 
-    let (tx, rx) = mpsc::unbounded_channel::<StreamEvent>();
-    let res_mgr = resource_manager_start(rx).map(|r| {
-        if let Err(e) = r {
-            error!("Resource manager error={}", e);
-        }
-    });
-    tokio::spawn(res_mgr.instrument(tracing::info_span!("STREAM-MGR")));
-    tokio::spawn(proc_stat());
+    info!("MSIR start...");
+
+    let stat_tx = statistic_bg_start();
+    let stream_tx = stream_mgr_start();
+
+    tokio::spawn(proc_stat().instrument(tracing::info_span!("PROC-BG")));
     tokio::spawn(async move {
-        if let Err(err) = rtmp_server_start(tx).await {
-            error!("Rtmp server error: {}\n", err);
+        if let Err(err) = rtmp_server_start(stream_tx, stat_tx).await {
+            error!("Start rtmp server error: {}\n", err);
         }
     });
 
     signal::ctrl_c().await?;
-    info!("msir exit...");
+    info!("MSIR exit...");
     Ok(())
 }
 
-async fn resource_manager_start(
-    receiver: mpsc::UnboundedReceiver<StreamEvent>,
-) -> Result<(), Box<dyn Error>> {
-    Manager::new(receiver).run().await?;
-    Ok(())
+fn statistic_bg_start() -> UnboundedSender<StatEvent> {
+    let (tx, rx) = mpsc::unbounded_channel::<StatEvent>();
+    let stat_bg = Statistic::new(rx);
+    tokio::spawn(stat_bg.run().instrument(tracing::info_span!("STAT-BG")));
+    tx
 }
 
-async fn rtmp_server_start(tx: mpsc::UnboundedSender<StreamEvent>) -> Result<(), Box<dyn Error>> {
-    let listen_addr = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "0.0.0.0:8081".to_string());
-
-    info!("Listening on: {}", listen_addr);
-
-    let listener = TcpListener::bind(listen_addr).await?;
-
-    while let Ok((inbound, _)) = listener.accept().await {
-        let uid = utils::gen_uid();
-        let rtmp_service = rtmp_service(inbound, uid.clone(), tx.clone()).map(|r| {
-            if let Err(e) = r {
-                error!("Failed to transfer; error={}", e);
-            }
-        });
-
-        tokio::spawn(rtmp_service.instrument(tracing::info_span!("RTMP-CONN", uid)));
-    }
-
-    Ok(())
-}
-
-// #[instrument]
-async fn rtmp_service(
-    inbound: TcpStream,
-    uid: String,
-    tx: mpsc::UnboundedSender<StreamEvent>,
-) -> Result<(), Box<dyn Error>> {
-    RtmpService::new(Transport::new(inbound), Some(uid))
-        .await?
-        .run(tx)
-        .await?;
-    Ok(())
+fn stream_mgr_start() -> UnboundedSender<StreamEvent> {
+    let (tx, rx) = mpsc::unbounded_channel::<StreamEvent>();
+    let stream_mgr = Manager::new(rx);
+    tokio::spawn(
+        stream_mgr
+            .run()
+            .instrument(tracing::info_span!("STREAM-MGR")),
+    );
+    tx
 }
 
 #[cfg(target_os = "linux")]
