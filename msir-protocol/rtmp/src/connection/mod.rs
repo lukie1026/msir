@@ -22,6 +22,13 @@ impl RtmpConnType {
             _ => false,
         }
     }
+
+    pub fn is_play(&self) -> bool {
+        match self {
+            RtmpConnType::FlvPlay | RtmpConnType::Play => true,
+            _ => false,
+        }
+    }
 }
 
 pub enum RtmpCtrlAction {

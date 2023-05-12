@@ -9,3 +9,4 @@ edition = "2021"
 tokio = { version = "1.28.0", features = ["full"]}
 thiserror = "1.0.40"
 tracing = "0.1.38"
+chrono = "0.4.24"

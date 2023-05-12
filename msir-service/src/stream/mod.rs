@@ -3,7 +3,7 @@ use self::{
     hub::{Hub, HubEvent},
 };
 use rtmp::message::RtmpMessage;
-use std::{collections::HashMap, fmt};
+use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, trace, warn};
 

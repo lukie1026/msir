@@ -488,6 +488,7 @@ dependencies = [
 name = "msir-core"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "thiserror",
  "tokio",
  "tracing",
@@ -692,7 +693,6 @@ version = "0.1.0"
 dependencies = [
  "byteorder",
  "bytes",
- "chrono",
  "msir-core",
  "rand",
  "rml_amf0",

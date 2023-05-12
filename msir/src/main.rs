@@ -2,6 +2,7 @@
 
 use msir_core::transport::Transport;
 use msir_service::rtmp_service::RtmpService;
+use msir_service::statistic::Statistic;
 use msir_service::stream::{Manager, StreamEvent};
 use msir_service::utils;
 use tokio::net::{TcpListener, TcpStream};

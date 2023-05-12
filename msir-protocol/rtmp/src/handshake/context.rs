@@ -1,7 +1,7 @@
 use super::{error::HandshakeError, RTMP_HANDSHAKE_SIZE, RTMP_VERSION};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, Bytes, BytesMut};
-use msir_core::transport::Transport;
+use msir_core::{transport::Transport, utils};
 use rand::Rng;
 use tokio::io::AsyncReadExt;
 use tracing::{error, info, info_span, instrument, trace};
@@ -48,7 +48,7 @@ impl Context {
         if self.c0c1.is_empty() {
             self.c0c1.reserve(1 + RTMP_HANDSHAKE_SIZE);
             self.c0c1.put_u8(RTMP_VERSION);
-            self.c0c1.put_u32(current_time());
+            self.c0c1.put_u32(utils::current_time());
             self.c0c1.put_u32(0);
             let mut rng = rand::thread_rng();
             for _ in 0..(RTMP_HANDSHAKE_SIZE - 8) {
@@ -61,7 +61,7 @@ impl Context {
         if self.s0s1s2.is_empty() {
             self.s0s1s2.reserve(1 + RTMP_HANDSHAKE_SIZE * 2);
             self.s0s1s2.put_u8(RTMP_VERSION);
-            self.s0s1s2.put_u32(current_time());
+            self.s0s1s2.put_u32(utils::current_time());
             if self.c0c1.is_empty() {
                 self.s0s1s2.put_u32(0);
             } else {
@@ -85,7 +85,7 @@ impl Context {
     pub fn create_c2(&mut self) -> Result<(), HandshakeError> {
         if self.c2.is_empty() {
             self.c2.reserve(RTMP_HANDSHAKE_SIZE);
-            self.c2.put_u32(current_time());
+            self.c2.put_u32(utils::current_time());
             if self.s0s1s2.is_empty() {
                 self.c2.put_u32(0);
             } else {
@@ -98,10 +98,4 @@ impl Context {
         }
         Ok(())
     }
-}
-
-use chrono::Local;
-fn current_time() -> u32 {
-    let dt = Local::now();
-    dt.timestamp() as u32
 }
