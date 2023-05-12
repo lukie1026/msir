@@ -33,31 +33,27 @@ impl RtmpService {
             // start publish/play
             match req.conn_type {
                 RtmpConnType::Play => {
-                    info!("Start play...");
                     self.rtmp.start_play().await?;
                 }
                 RtmpConnType::FmlePublish => {
-                    info!("Start fmle publish...");
                     self.rtmp.start_fmle_publish().await?;
                 }
                 RtmpConnType::FlashPublish => {
-                    info!("Start flash publish...");
                     self.rtmp.start_flash_publish().await?;
                 }
                 RtmpConnType::HaivisionPublish => {
-                    info!("Start haivision publish...");
                     self.rtmp.start_haivision_publish().await?;
                 }
                 _ => {}
             }
             let token = self.register(&mgr_tx, &req).await?;
-            info!("Register {:?} succeed", self.uid);
+            debug!("Register to hub");
             let ret = match req.conn_type.is_publish() {
                 true => self.publishing(&req, token).await,
                 false => self.playing(&req, token).await,
             };
-            info!("Unegister {:?} {:?} succeed", self.uid, req.conn_type);
             self.unregister(&mgr_tx, &req).await;
+            debug!("Unegister to hub");
             match ret? {
                 Some(act) => match act {
                     RtmpCtrlAction::Republish | RtmpCtrlAction::Close => continue,
@@ -141,7 +137,6 @@ impl RtmpService {
                         Ok(msg) => {
                             match msg {
                                 RtmpMessage::Amf0Command { .. } => {
-                                    info!("Server receive: {}", msg);
                                     if let Some(act) = self.rtmp.process_amf_command(msg).await? {
                                         match act {
                                             RtmpCtrlAction::Pause(p) => {
@@ -153,7 +148,7 @@ impl RtmpService {
                                     }
                                 }
                                 RtmpMessage::Acknowledgement { .. } => {} // Do not trace
-                                other => info!("Server receive and ignore: {}", other)
+                                _ => {} //debug!("Ignore {}", other)
                             }
                         }
                         Err(err) => return Err(ServiceError::ConnectionError(err)),
@@ -171,7 +166,7 @@ impl RtmpService {
                             // Merge msgs in 350ms for performance, but will be harmful to latency
                             // TODO: rasie the priority of I frame
                             if cur_ts >= (start_ts + 350) || cur_ts == 0 {
-                                debug!("Merged send msgs len {} total-size {}", msgs.len(), cache_size);
+                                trace!("Merged send msgs len {} total_size {}", msgs.len(), cache_size);
                                 self.rtmp.send_messages(&msgs, 0, 0).await?;
                                 msgs.clear();
                                 start_ts = cur_ts;
@@ -201,27 +196,24 @@ impl RtmpService {
                         Ok(msg) => {
                             match msg {
                                 RtmpMessage::Amf0Command { .. } => {
-                                    info!("Server receive: {}", msg);
                                     if let Some(act) = self.rtmp.process_amf_command(msg).await? {
                                         return Ok(Some(act));
                                     }
                                 }
                                 RtmpMessage::Amf0Data { .. } => {
-                                    info!("Server receive: {}", msg);
                                     if msg.is_metadata() {
                                         hub.on_metadata(msg)?;
                                     }
                                 }
                                 RtmpMessage::VideoData {..} => hub.on_frame(msg)?,
                                 RtmpMessage::AudioData {..} => hub.on_frame(msg)?,
-                                other => info!("Server receive msg and ignore: {}", other)
+                                other => debug!("Ignore {}", other)
                             }
                         }
                         Err(err) => return Err(ServiceError::ConnectionError(err)),
                     }
                 }
                 ret = hub.process_hub_ev() => {
-                    info!("Proccess hub event: {:?}", ret);
                     if let Err(e) = ret {
                         return Err(ServiceError::HubError(e));
                     }

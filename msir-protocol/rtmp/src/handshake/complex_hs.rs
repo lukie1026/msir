@@ -1,7 +1,7 @@
 use super::{context::Context, error::HandshakeError, RTMP_HANDSHAKE_SIZE, RTMP_VERSION};
 use msir_core::transport::Transport;
 use tokio::io::AsyncWriteExt;
-use tracing::{error, info, info_span, instrument, trace};
+use tracing::{debug, error, info, info_span, instrument, trace};
 
 pub struct ComplexHandshake {}
 
@@ -11,7 +11,7 @@ impl ComplexHandshake {
         ctx: &mut Context,
         io: &mut Transport,
     ) -> Result<(), HandshakeError> {
-        info!("Complex handshake do not implement, try simple");
+        trace!("Complex handshake do not implement, try simple");
 
         Err(HandshakeError::TrySimpleHandshake)
     }
@@ -20,7 +20,7 @@ impl ComplexHandshake {
         ctx: &mut Context,
         io: &mut Transport,
     ) -> Result<(), HandshakeError> {
-        info!("Complex handshake do not implement, try simple");
+        trace!("Complex handshake do not implement, try simple");
 
         Err(HandshakeError::TrySimpleHandshake)
     }

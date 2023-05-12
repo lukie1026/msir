@@ -40,7 +40,6 @@ impl Server {
         timestamp: u32,
         csid: u32,
     ) -> Result<(), ConnectionError> {
-        trace!("Server response: {}", msg);
         self.ctx.send_message(msg, timestamp, csid).await
     }
     pub async fn send_messages(
@@ -61,10 +60,6 @@ impl Server {
                 ..
             } = self.ctx.expect_amf_command(&[]).await?
             {
-                info!(
-                    "Server receive {:?} transaction_id={}",
-                    command_name, transaction_id
-                );
                 match command_name.as_str() {
                     COMMAND_PLAY => {
                         self.process_play(&mut req, additional_arguments)?;
@@ -84,6 +79,13 @@ impl Server {
                     }
                 };
                 self.conn_type = req.conn_type.clone();
+                info!(
+                    "Identify {:?} app={} stream={:?} param={:?}",
+                    req.conn_type,
+                    req.tc_url.path(),
+                    req.stream,
+                    req.tc_url.query()
+                );
                 return Ok(req);
             }
             return Err(ConnectionError::UnexpectedMessage);
@@ -91,14 +93,11 @@ impl Server {
     }
     async fn connect_app(&mut self) -> Result<Request, ConnectionError> {
         if let RtmpMessage::Amf0Command {
-            command_name,
             transaction_id,
             command_object,
             ..
         } = self.ctx.expect_amf_command(&[COMMAND_CONNECT]).await?
         {
-            info!("Server receive {:?} {:?}", command_name, command_object);
-
             if transaction_id != 1.0 {
                 warn!("Invalid transaction_id={} of connect_app", transaction_id);
             }
@@ -191,10 +190,6 @@ impl Server {
                 ])
                 .await?
             {
-                info!(
-                    "Server receive {:?} transaction_id={}",
-                    command_name, transaction_id
-                );
                 return match command_name.as_str() {
                     COMMAND_PLAY => self.process_play(req, additional_arguments),
                     COMMAND_PUBLISH => self.process_flash_publish(req, additional_arguments),
@@ -323,10 +318,6 @@ impl Server {
         if let RtmpMessage::Amf0Command { transaction_id, .. } =
             self.ctx.expect_amf_command(&[COMMAND_FC_PUBLISH]).await?
         {
-            info!(
-                "Server receive {:?} transaction_id={}",
-                COMMAND_FC_PUBLISH, transaction_id
-            );
             // response _result
             self.send_message(RtmpMessage::new_fcpublish_res(transaction_id), 0, 0)
                 .await?;
@@ -340,10 +331,6 @@ impl Server {
             .expect_amf_command(&[COMMAND_CREATE_STREAM])
             .await?
         {
-            info!(
-                "Server receive {:?} transaction_id={}",
-                COMMAND_CREATE_STREAM, transaction_id
-            );
             // response _result
             self.send_message(RtmpMessage::new_create_stream_res(transaction_id), 0, 0)
                 .await?;
@@ -352,13 +339,9 @@ impl Server {
         }
 
         // publish
-        if let RtmpMessage::Amf0Command { transaction_id, .. } =
+        if let RtmpMessage::Amf0Command { .. } =
             self.ctx.expect_amf_command(&[COMMAND_PUBLISH]).await?
         {
-            info!(
-                "Server receive {:?} transaction_id={}",
-                COMMAND_PUBLISH, transaction_id
-            );
             // response onFCPublish(NetStream.Publish.Start)
             self.send_message(RtmpMessage::new_on_fcpublish(), 0, 0)
                 .await?;
@@ -372,13 +355,9 @@ impl Server {
     }
     pub async fn start_haivision_publish(&mut self) -> Result<(), ConnectionError> {
         // publish
-        if let RtmpMessage::Amf0Command { transaction_id, .. } =
+        if let RtmpMessage::Amf0Command { .. } =
             self.ctx.expect_amf_command(&[COMMAND_PUBLISH]).await?
         {
-            info!(
-                "Server receive {:?} transaction_id={}",
-                COMMAND_PUBLISH, transaction_id
-            );
             // response onFCPublish(NetStream.Publish.Start)
             self.send_message(RtmpMessage::new_on_fcpublish(), 0, 0)
                 .await?;

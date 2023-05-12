@@ -3,9 +3,9 @@ use self::{
     hub::{Hub, HubEvent},
 };
 use rtmp::message::RtmpMessage;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 use tokio::sync::{mpsc, oneshot};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 pub mod error;
 pub mod gop;
@@ -57,7 +57,7 @@ impl Manager {
     }
 
     pub async fn run(&mut self) -> Result<(), StreamError> {
-        info!("Resource Manager daemon start...");
+        info!("Straem Manager daemon start...");
         while let Some(ev) = self.receiver.recv().await {
             match ev {
                 StreamEvent::Register(ev) => self.register(ev).await,
@@ -69,12 +69,12 @@ impl Manager {
 
     async fn register(&mut self, ev: RegisterEv) {
         let hub_ev_tx = self.pool.get(&ev.stream_key);
-        info!(
-            "received register [{}]: {:?} {:?} {:?}",
-            hub_ev_tx.is_none(),
+        debug!(
+            "Recv register {:?} {:?} {:?} exist {}",
             ev.uid,
             ev.role,
-            ev.stream_key
+            ev.stream_key,
+            hub_ev_tx.is_some(),
         );
         let token = match ev.role {
             RoleType::Producer => {
@@ -106,27 +106,22 @@ impl Manager {
 
     async fn unregister(&mut self, ev: UnregisterEv) {
         let hub_ev_tx = self.pool.get(&ev.stream_key);
-        info!(
-            "received unregister [{}]: {:?} {:?} {:?}",
-            hub_ev_tx.is_none(),
-            ev.uid,
-            ev.role,
-            ev.stream_key
+        debug!(
+            "Recv unregister {:?} {:?} {:?}",
+            ev.uid, ev.role, ev.stream_key
         );
 
         if let Some(hub_ev_tx) = hub_ev_tx {
             match ev.role {
                 RoleType::Consumer => {
                     if let Err(_) = hub_ev_tx.send(HubEvent::ComsumerLeave(ev.uid)) {
-                        warn!("send to hub failed");
+                        warn!("Send unregister to hub failed");
                     }
                 }
                 RoleType::Producer => {
                     self.pool.remove(&ev.stream_key);
                 }
             }
-        } else {
-            warn!("unregister failed for no publish");
         }
     }
 }

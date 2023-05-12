@@ -2,8 +2,7 @@ use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{Buf, Bytes, BytesMut};
 use msir_core::transport::Transport;
 use std::{cmp, io::Cursor};
-use tokio::net::TcpStream;
-use tracing::{error, info, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::message::{decode, types::msg_type::*, RtmpMessage, RtmpPayload};
 
@@ -127,7 +126,6 @@ impl ChunkCodec {
     }
     pub async fn recv_rtmp_message(&mut self) -> Result<RtmpMessage> {
         loop {
-            trace!("Receiving message...");
             let payload = self.recv_interlaced_message().await?;
             match payload {
                 Some((b, mh)) => {
@@ -148,47 +146,7 @@ impl ChunkCodec {
         let msgs = [msg];
         self.send_rtmp_messages(&msgs[0..1]).await
     }
-    // pub async fn send_rtmp_messages2(&mut self, msgs: &[RtmpPayload]) -> Result<()> {
-    //     for (_, msg) in msgs.into_iter().enumerate() {
-    //         if msg.raw_data.is_empty() {
-    //             continue;
-    //         }
-    //         let mut init = true;
-    //         let total = msg.raw_data.len();
-    //         let mut sent = 0_usize;
-    //         loop {
-    //             let length = cmp::min(total - sent, self.out_chunk_size);
-    //             let (s, e) = self.add_chunk_header(msg, sent == 0, init)?;
-    //             let mut write_array: Vec<IoSlice> = Vec::with_capacity(2);
-    //             let chunk_length = (e - s) + length;
-    //             let mut ret = 0_usize;
-    //             loop {
-    //                 if ret < chunk_length {
-    //                     write_array.clear();
-    //                     if ret >= (e - s) {
-    //                         write_array.push(IoSlice::new(
-    //                             &msg.raw_data[(sent + (ret - (e - s)))..(sent + length)],
-    //                         ));
-    //                     } else {
-    //                         write_array.push(IoSlice::new(&self.chunk_header_cache[(s + ret)..e]));
-    //                         write_array.push(IoSlice::new(&msg.raw_data[sent..(sent + length)]));
-    //                     }
-    //                 } else {
-    //                     break;
-    //                 }
-    //                 ret += self.io.write_vectored(&write_array).await?;
-    //             }
 
-    //             init = false;
-    //             sent += length;
-    //             if sent >= total {
-    //                 break;
-    //             }
-    //         }
-    //     }
-    //     self.io.flush().await?;
-    //     Ok(())
-    // }
     pub async fn send_rtmp_messages(&mut self, msgs: &[RtmpPayload]) -> Result<()> {
         for msg in msgs.into_iter() {
             if msg.raw_data.is_empty() {
@@ -376,19 +334,18 @@ impl ChunkCodec {
 
         // got entire RTMP message?
         if chunk.header.payload_length == chunk.payload.len() {
-            trace!(
-                "Reading payload finish, read={}, total={}",
-                chunk.payload.len(),
-                chunk.header.payload_length
-            );
+            // trace!(
+            //     "Read payload finish, total={}",
+            //     chunk.header.payload_length
+            // );
             return Ok(Some(chunk.payload.split().into()));
         }
 
-        trace!(
-            "Read payload continue, read={}, total={}",
-            chunk.payload.len(),
-            chunk.header.payload_length
-        );
+        // trace!(
+        //     "Read payload continue, nread={}, total={}",
+        //     chunk.payload.len(),
+        //     chunk.header.payload_length
+        // );
 
         Ok(None)
     }
@@ -397,23 +354,19 @@ impl ChunkCodec {
         self.io.safe_guard();
 
         let (fmt, csid) = self.read_basic_header().await?;
+        // trace!("Read basic header: fmt={} csid={}", fmt, csid,);
+
         if csid >= PERF_CHUNK_STREAM_CACHE {
             return Err(ChunkError::LargeCsid(csid));
         }
-        // let mut chunk = match self.chunk_streams.remove_entry(&csid) {
-        //     Some((_, v)) => v,
-        //     None => ChunkStream::new(csid),
-        // };
         if let None = self.chunk_streams[csid as usize] {
             self.chunk_streams[csid as usize] = Some(ChunkStream::new(csid));
         }
-        trace!("Read basic header, fmt={} csid={}", fmt, csid,);
+
         let mh = self.read_message_header(csid, fmt).await?;
-        trace!("Read message header, fmt={} csid={}", fmt, csid);
+        // trace!("Read message header: ts={} type={} len={} sid={}", mh.timestamp, mh.message_type, mh.payload_length, mh.stream_id);
+
         let payload = self.read_message_payload(csid).await;
-        trace!("Read message payload, {:?}", payload);
-        // let mh = chunk.header.clone();
-        // self.chunk_streams.insert(csid, chunk);
 
         self.io.safe_flush();
 

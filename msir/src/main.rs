@@ -1,25 +1,3 @@
-//! A proxy that forwards data to another server and forwards that server's
-//! responses back to clients.
-//!
-//! Because the Tokio runtime uses a thread pool, each TCP connection is
-//! processed concurrently with all other TCP connections across multiple
-//! threads.
-//!
-//! You can showcase this by running this in one terminal:
-//!
-//!     cargo run --example proxy
-//!
-//! This in another terminal
-//!
-//!     cargo run --example echo
-//!
-//! And finally this in another terminal
-//!
-//!     cargo run --example connect 127.0.0.1:8081
-//!
-//! This final terminal will connect to our proxy, which will in turn connect to
-//! the echo server, and you'll be able to see data flowing between them.
-
 #![warn(rust_2018_idioms)]
 
 use msir_core::transport::Transport;
@@ -44,7 +22,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(tracing::Level::DEBUG)
         .with_writer(io::stdout)
         .with_writer(non_blocking) // write to file
         .with_ansi(false) // disable color if write to file
@@ -56,7 +34,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             error!("Resource manager error={}", e);
         }
     });
-    tokio::spawn(res_mgr.instrument(tracing::info_span!("RES-MGR")));
+    tokio::spawn(res_mgr.instrument(tracing::info_span!("STREAM-MGR")));
     tokio::spawn(proc_stat());
     tokio::spawn(async move {
         if let Err(err) = rtmp_server_start(tx).await {

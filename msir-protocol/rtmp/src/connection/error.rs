@@ -37,6 +37,9 @@ pub enum ConnectionError {
     #[error("Encode rtmp message failed: {0}")]
     RtmpMessageEncode(#[from] MessageEncodeError),
 
+    #[error("Invalid chunk size: {0}")]
+    InvalidChunkSize(usize),
+
     // Failed to read the values
     #[error("An IO error occurred: {0}")]
     Io(#[from] io::Error),

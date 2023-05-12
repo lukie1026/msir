@@ -5,7 +5,7 @@ use crate::{
 
 use msir_core::transport::Transport;
 use std::collections::HashMap;
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use super::error::ConnectionError;
 
@@ -45,19 +45,17 @@ impl Context {
     }
     async fn on_recv_message(&mut self, msg: &RtmpMessage) -> Result<(), ConnectionError> {
         // TODO: try to response acknowledgement
+        trace!("Recv {}", msg);
         match msg {
             RtmpMessage::SetChunkSize { chunk_size } => {
                 let chunk_size = *chunk_size as usize;
                 if chunk_size < 128 || chunk_size > 65536 {
-                    warn!("Accept set_chunk_size {}", chunk_size);
+                    return Err(ConnectionError::InvalidChunkSize(chunk_size));
                 }
-                trace!("Accept set_chunk_size {}", chunk_size);
                 self.chunk_io.set_in_chunk_size(chunk_size);
             }
             RtmpMessage::SetWindowAckSize { ack_window_size } => {
-                let ack_window_size = *ack_window_size;
-                trace!("Accept set_window_ack_size {}", ack_window_size);
-                self.in_ack_size.window = ack_window_size;
+                self.in_ack_size.window = *ack_window_size;
             }
             RtmpMessage::UserControl {
                 event_type,
@@ -110,6 +108,7 @@ impl Context {
         Ok(())
     }
     fn on_send_message(&mut self, msg: &RtmpMessage) -> Result<(), ConnectionError> {
+        trace!("Send {}", msg);
         match msg {
             RtmpMessage::SetChunkSize { chunk_size } => {
                 self.chunk_io.set_out_chunk_size(*chunk_size as usize)
@@ -131,7 +130,6 @@ impl Context {
             if msg.expect_amf(specified_cmds) {
                 return Ok(msg);
             }
-            info!("Server ignore msg: {}", msg);
         }
     }
     // pub async fn expect_result_or_error(&mut self, transcation_id: f64) -> Result<RtmpMessage, ConnectionError> {

@@ -1,6 +1,6 @@
 use super::{context::Context, error::HandshakeError, RTMP_HANDSHAKE_SIZE, RTMP_VERSION};
 use msir_core::transport::Transport;
-use tracing::{error, info, info_span, instrument, trace};
+use tracing::{debug, error, info, info_span, instrument, trace};
 
 pub struct SimpleHandshake {}
 
@@ -29,7 +29,7 @@ impl SimpleHandshake {
         io.write_all(&ctx.c2[0..]).await?;
         io.flush().await?;
 
-        info!("Simple handshake completed");
+        debug!("Simple handshake completed");
 
         Ok(())
     }
@@ -46,8 +46,6 @@ impl SimpleHandshake {
             return Err(HandshakeError::InvalidVersion(ctx.c0c1[0]));
         }
 
-        trace!("Version check pass");
-
         ctx.create_s0s1s2()?;
 
         io.write_all(&ctx.s0s1s2).await?;
@@ -59,7 +57,7 @@ impl SimpleHandshake {
 
         trace!("Read c2 len {}", ctx.c2.len());
 
-        info!("Simple handshake completed");
+        debug!("Simple handshake completed");
 
         Ok(())
     }

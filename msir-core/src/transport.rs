@@ -60,7 +60,7 @@ impl Transport {
 
     pub fn safe_guard(&mut self) {
         if self.real_read_pos - self.virtual_read_pos > 0 {
-            debug!("Safe guard restore");
+            trace!("Safe guard restore");
         }
         self.real_read_pos = self.virtual_read_pos;
         self.safe = true;
@@ -96,7 +96,7 @@ impl Transport {
     }
 
     fn buf_move_to_head(&mut self) {
-        debug!(
+        trace!(
             "Readbuf moved, len={}, move={}",
             self.write_pos - self.virtual_read_pos,
             self.virtual_read_pos

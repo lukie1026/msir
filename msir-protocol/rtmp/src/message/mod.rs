@@ -478,28 +478,24 @@ impl fmt::Display for RtmpMessage {
 pub fn decode(payload: RtmpPayload) -> Result<RtmpMessage, MessageDecodeError> {
     match payload.message_type {
         msg_type::SET_CHUNK_SIZE => {
-            trace!("Recv message <set_chunk_size>");
             let mut cursor = Cursor::new(payload.raw_data);
             let chunk_size = cursor.read_u32::<BigEndian>()?;
 
             return Ok(RtmpMessage::SetChunkSize { chunk_size });
         }
         msg_type::ABORT => {
-            trace!("Recv message <abort>");
             let mut cursor = Cursor::new(payload.raw_data);
             let stream_id = cursor.read_u32::<BigEndian>()?;
 
             return Ok(RtmpMessage::Abort { stream_id });
         }
         msg_type::ACK => {
-            trace!("Recv message <ack>");
             let mut cursor = Cursor::new(payload.raw_data);
             let sequence_number = cursor.read_u32::<BigEndian>()?;
 
             return Ok(RtmpMessage::Acknowledgement { sequence_number });
         }
         msg_type::USER_CONTROL => {
-            trace!("Recv message <user_control>");
             let mut cursor = Cursor::new(payload.raw_data);
             let mut extra_data: u32 = 0;
             let event_type: u16 = cursor.read_u16::<BigEndian>()?;
@@ -515,14 +511,12 @@ pub fn decode(payload: RtmpPayload) -> Result<RtmpMessage, MessageDecodeError> {
             });
         }
         msg_type::WIN_ACK_SIZE => {
-            trace!("Recv message <win_ack_size>");
             let mut cursor = Cursor::new(payload.raw_data);
             let ack_window_size = cursor.read_u32::<BigEndian>()?;
 
             return Ok(RtmpMessage::SetWindowAckSize { ack_window_size });
         }
         msg_type::SET_PEER_BW => {
-            trace!("Recv message <set_peer_bw>");
             let mut cursor = Cursor::new(payload.raw_data);
             let size = cursor.read_u32::<BigEndian>()?;
             let limit_type = cursor.read_u8()?;
@@ -530,7 +524,6 @@ pub fn decode(payload: RtmpPayload) -> Result<RtmpMessage, MessageDecodeError> {
             return Ok(RtmpMessage::SetPeerBandwidth { size, limit_type });
         }
         msg_type::AUDIO => {
-            trace!("Recv message <audio>");
             return Ok(RtmpMessage::AudioData {
                 stream_id: payload.csid,
                 timestamp: payload.timestamp,
@@ -538,21 +531,15 @@ pub fn decode(payload: RtmpPayload) -> Result<RtmpMessage, MessageDecodeError> {
             });
         }
         msg_type::VIDEO => {
-            trace!("Recv message <video>");
             return Ok(RtmpMessage::VideoData {
                 stream_id: payload.csid,
                 timestamp: payload.timestamp,
                 payload: payload.raw_data,
             });
         }
-        msg_type::AGGREGATE => {
-            trace!("Recv message <aggregate>");
-        }
-        msg_type::AMF3_SHARED_OBJ | msg_type::AMF0_SHARED_OBJ => {
-            trace!("Recv message <amf_shared_obj>");
-        }
+        msg_type::AGGREGATE => {}
+        msg_type::AMF3_SHARED_OBJ | msg_type::AMF0_SHARED_OBJ => {}
         msg_type::AMF3_DATA | msg_type::AMF0_DATA => {
-            trace!("Recv message <amf_data>");
             let mut cursor = Cursor::new(payload.raw_data);
             let values = rml_amf0::deserialize(&mut cursor)?;
 
@@ -577,7 +564,6 @@ pub fn decode(payload: RtmpPayload) -> Result<RtmpMessage, MessageDecodeError> {
             }
         }
         msg_type::AMF3_CMD | msg_type::AMF0_CMD => {
-            trace!("Recv message <amf_cmd>");
             let mut cursor = Cursor::new(payload.raw_data);
             if payload.message_type == msg_type::AMF3_CMD {
                 cursor.advance(1);
@@ -624,9 +610,7 @@ pub fn decode(payload: RtmpPayload) -> Result<RtmpMessage, MessageDecodeError> {
                 additional_arguments: arguments,
             });
         }
-        other => {
-            trace!("Recv message <unknow {}>", other);
-        }
+        _ => {}
     }
     Ok(RtmpMessage::Unknown {
         type_id: payload.message_type,
