@@ -1,12 +1,9 @@
-use std::collections::HashMap;
-
+use msir_core::utils;
 use rtmp::connection::RtmpConnType;
+use std::collections::HashMap;
 use tokio::sync::mpsc::{self, UnboundedSender};
 
 pub enum StatEvent {
-    CreateStream(String, StreamStat),
-    DeleteStream(String),
-
     CreateConn(String, ConnStat),
     DeleteConn(String, ConnStat),
     UpdateConn(String, ConnStat),
@@ -37,8 +34,6 @@ impl Statistic {
     pub async fn run(&mut self) {
         while let Some(ev) = self.rx.recv().await {
             match ev {
-                StatEvent::CreateStream(skey, ss) => self.on_create_stream(skey, ss),
-                StatEvent::DeleteStream(skey) => self.on_delete_stream(skey),
                 StatEvent::CreateConn(uid, cs) => self.on_create_conn(uid, cs),
                 StatEvent::DeleteConn(uid, cs) => self.on_delete_conn(uid, cs),
                 StatEvent::UpdateConn(uid, cs) => self.on_update_conn(uid, cs),
@@ -46,20 +41,14 @@ impl Statistic {
         }
     }
 
-    fn on_create_stream(&mut self, skey: String, stat: StreamStat) {
-        self.streams.insert(skey, stat);
-    }
-
-    fn on_delete_stream(&mut self, skey: String) {
-        self.conns.remove(&skey);
-    }
-
     fn on_create_conn(&mut self, uid: String, stat: ConnStat) {
         let conn = self.conns.insert(uid, stat).unwrap();
-        // TODO: RemoteIngester ??
-        if let Some(stream) = self.streams.get_mut(&conn.stream_key) {
-            stream.clients += 1;
-        }
+        // TODO: RemoteIngester need to first call than player
+        let stream = self
+            .streams
+            .entry(conn.stream_key.clone())
+            .or_insert(StreamStat::new(utils::current_time(), conn.conn_type));
+        stream.clients += 1;
     }
 
     fn on_update_conn(&mut self, uid: String, stat: ConnStat) {
@@ -90,8 +79,15 @@ impl Statistic {
     }
 
     fn on_delete_conn(&mut self, uid: String, stat: ConnStat) {
-        if let Some(stream) = self.streams.get_mut(&stat.stream_key) {
-            stream.clients -= 1;
+        match stat.conn_type.is_publish() {
+            true => {
+                self.streams.remove(&stat.stream_key);
+            }
+            false => {
+                self.streams
+                    .get_mut(&stat.stream_key)
+                    .map(|s| s.clients += 1);
+            }
         }
         self.conns.remove(&uid);
     }

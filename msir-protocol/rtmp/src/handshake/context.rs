@@ -1,9 +1,7 @@
 use super::{error::HandshakeError, RTMP_HANDSHAKE_SIZE, RTMP_VERSION};
-use byteorder::{BigEndian, ByteOrder};
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{BufMut, BytesMut};
 use msir_core::{transport::Transport, utils};
 use rand::Rng;
-use tokio::io::AsyncReadExt;
 use tracing::{error, info, info_span, instrument, trace};
 
 pub struct Context {

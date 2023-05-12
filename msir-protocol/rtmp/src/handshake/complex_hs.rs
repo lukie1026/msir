@@ -1,6 +1,5 @@
 use super::{context::Context, error::HandshakeError, RTMP_HANDSHAKE_SIZE, RTMP_VERSION};
 use msir_core::transport::Transport;
-use tokio::io::AsyncWriteExt;
 use tracing::{debug, error, info, info_span, instrument, trace};
 
 pub struct ComplexHandshake {}
