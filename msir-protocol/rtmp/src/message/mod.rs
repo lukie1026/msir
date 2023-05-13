@@ -3,15 +3,10 @@ use bytes::{Buf, Bytes};
 use error::{MessageDecodeError, MessageEncodeError};
 use rml_amf0;
 use rml_amf0::Amf0Value;
-
 use std::{collections::HashMap, fmt, io::Cursor};
-
-use tracing::{error, event, info, info_span, instrument, trace};
-
 use self::types::{amf0_command_type::*, rtmp_sig::*, rtmp_status::*, *};
 
 pub mod error;
-pub mod packet;
 pub mod request;
 pub mod types;
 

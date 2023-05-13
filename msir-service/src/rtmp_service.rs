@@ -2,11 +2,11 @@ use std::time::Duration;
 
 use crate::{
     error::ServiceError,
-    statistic::{ConnStat, StatEvent, Statistic},
+    statistic::{ConnStat, StatEvent},
     stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
     utils,
 };
-use msir_core::{transport::Transport, utils::current_time};
+use msir_core::transport::Transport;
 use rtmp::connection::RtmpConnType;
 use rtmp::connection::{server as rtmp_conn, RtmpCtrlAction};
 use rtmp::message::request::Request;
@@ -188,7 +188,7 @@ impl RtmpService {
                             msgs.push(msg);
                             // Merge msgs in 350ms for performance, but will be harmful to latency
                             // TODO: rasie the priority of I frame
-                            if cur_ts >= (start_ts + 350) || cur_ts == 0 {
+                            if cur_ts >= (start_ts + 350) || cur_ts == 0 || cur_ts < start_ts {
                                 trace!("Merged send msgs len {} total_size {}", msgs.len(), cache_size);
                                 self.rtmp.send_messages(&msgs, 0, 0).await?;
                                 msgs.clear();
