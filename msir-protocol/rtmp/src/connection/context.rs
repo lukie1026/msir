@@ -4,7 +4,7 @@ use crate::{
 };
 
 use msir_core::transport::Transport;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 use tracing::{debug, error, info, trace, warn};
 
 use super::error::ConnectionError;
@@ -34,6 +34,22 @@ impl Context {
         }
     }
 
+    pub fn set_recv_timeout(&mut self, tm: Duration) {
+        self.chunk_io.set_recv_timeout(tm);
+    }
+
+    pub fn set_send_timeout(&mut self, tm: Duration) {
+        self.chunk_io.set_send_timeout(tm);
+    }
+
+    pub fn get_recv_bytes(&mut self) -> u64 {
+        self.chunk_io.get_recv_bytes()
+    }
+
+    pub fn get_send_bytes(&mut self) -> u64 {
+        self.chunk_io.get_send_bytes()
+    }
+
     pub fn set_in_window_ack_size(&mut self, ack_size: u32) {
         self.in_ack_size.window = ack_size;
     }
@@ -43,6 +59,7 @@ impl Context {
         self.on_recv_message(&msg).await?;
         Ok(msg)
     }
+
     async fn on_recv_message(&mut self, msg: &RtmpMessage) -> Result<(), ConnectionError> {
         // TODO: try to response acknowledgement
         trace!("Recv {}", msg);
@@ -93,6 +110,7 @@ impl Context {
         self.chunk_io.send_rtmp_message(payload).await?;
         Ok(())
     }
+
     pub async fn send_messages(
         &mut self,
         msgs: &[RtmpMessage],
@@ -107,6 +125,7 @@ impl Context {
         self.chunk_io.send_rtmp_messages(&payloads).await?;
         Ok(())
     }
+
     fn on_send_message(&mut self, msg: &RtmpMessage) -> Result<(), ConnectionError> {
         trace!("Send {}", msg);
         match msg {

@@ -1,7 +1,7 @@
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{Buf, Bytes, BytesMut};
 use msir_core::transport::Transport;
-use std::{cmp, io::Cursor};
+use std::{cmp, io::Cursor, time::Duration};
 use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::message::{decode, types::msg_type::*, RtmpMessage, RtmpPayload};
@@ -118,12 +118,31 @@ impl ChunkCodec {
             chunk_header_cache: Vec::with_capacity(16 * 128),
         }
     }
+
+    pub fn set_recv_timeout(&mut self, tm: Duration) {
+        self.io.set_recv_timeout(tm)
+    }
+
+    pub fn set_send_timeout(&mut self, tm: Duration) {
+        self.io.set_send_timeout(tm)
+    }
+
+    pub fn get_recv_bytes(&mut self) -> u64 {
+        self.io.get_recv_bytes()
+    }
+
+    pub fn get_send_bytes(&mut self) -> u64 {
+        self.io.get_send_bytes()
+    }
+
     pub fn set_in_chunk_size(&mut self, n: usize) {
         self.in_chunk_size = n;
     }
+
     pub fn set_out_chunk_size(&mut self, n: usize) {
         self.out_chunk_size = n;
     }
+
     pub async fn recv_rtmp_message(&mut self) -> Result<RtmpMessage> {
         loop {
             let payload = self.recv_interlaced_message().await?;
@@ -142,6 +161,7 @@ impl ChunkCodec {
             }
         }
     }
+
     pub async fn send_rtmp_message(&mut self, msg: RtmpPayload) -> Result<()> {
         let msgs = [msg];
         self.send_rtmp_messages(&msgs[0..1]).await
@@ -173,6 +193,7 @@ impl ChunkCodec {
         self.io.flush().await?;
         Ok(())
     }
+
     fn add_chunk_header(
         &mut self,
         msg: &RtmpPayload,
