@@ -1,14 +1,13 @@
-use super::{error::StreamError, gop::GopCache};
+use super::{error::StreamError, gop::GopCache, HubToSubsChanTx, MgrToHubChanRx};
 use rtmp::{codec, message::RtmpMessage};
 use std::collections::HashMap;
-use tokio::sync::mpsc;
 use tracing::{debug, info, trace, warn};
 
 const PERF_MERGE_SEND_CHAN: u32 = 170;
 
 pub enum HubEvent {
-    ComsumerJoin(String, mpsc::UnboundedSender<Vec<RtmpMessage>>),
-    ComsumerLeave(String),
+    SubscriberJoin(String, HubToSubsChanTx),
+    SubscriberLeave(String),
 }
 
 #[derive(Debug, Default)]
@@ -22,29 +21,29 @@ struct MetaCache {
 pub struct Hub {
     meta: MetaCache,
     pub gop: GopCache,
-    pub receiver: mpsc::UnboundedReceiver<HubEvent>,
-    pub comsumers: HashMap<String, mpsc::UnboundedSender<Vec<RtmpMessage>>>,
+    pub event_rx: MgrToHubChanRx,
+    pub subscribers: HashMap<String, HubToSubsChanTx>,
     merge_msgs: Vec<RtmpMessage>,
     start_ts: u32,
 }
 
 impl Hub {
-    pub fn new(rx: mpsc::UnboundedReceiver<HubEvent>) -> Self {
+    pub fn new(rx: MgrToHubChanRx) -> Self {
         Self {
             gop: GopCache::new(),
             meta: MetaCache::default(),
-            receiver: rx,
-            comsumers: HashMap::new(),
+            event_rx: rx,
+            subscribers: HashMap::new(),
             merge_msgs: Vec::with_capacity(64),
             start_ts: 0,
         }
     }
 
     pub async fn process_hub_ev(&mut self) -> Result<(), StreamError> {
-        match self.receiver.recv().await {
+        match self.event_rx.recv().await {
             Some(ev) => {
                 match ev {
-                    HubEvent::ComsumerJoin(uid, tx) => {
+                    HubEvent::SubscriberJoin(uid, tx) => {
                         let mut sent_meta = 0;
                         let mut sent_sh = 0;
                         let mut sent_frame = 0;
@@ -80,9 +79,9 @@ impl Hub {
                             sent_frame,
                             self.gop.duration()
                         );
-                        self.comsumers.insert(uid, tx)
+                        self.subscribers.insert(uid, tx)
                     }
-                    HubEvent::ComsumerLeave(uid) => self.comsumers.remove(&uid),
+                    HubEvent::SubscriberLeave(uid) => self.subscribers.remove(&uid),
                 };
                 Ok(())
             }
@@ -92,7 +91,7 @@ impl Hub {
 
     pub fn on_metadata(&mut self, msg: RtmpMessage) -> Result<(), StreamError> {
         debug!("Recv metadata {}", msg);
-        for (_, comsumer) in self.comsumers.iter() {
+        for (_, comsumer) in self.subscribers.iter() {
             if let Err(e) = comsumer.send(vec![msg.clone()]) {
                 warn!("Hub send metadata to comsumer failed: {:?}", e);
             }
@@ -111,7 +110,7 @@ impl Hub {
             || cur_ts < self.start_ts
             || has_key_frame
         {
-            for (_, comsumer) in self.comsumers.iter() {
+            for (_, comsumer) in self.subscribers.iter() {
                 let _ = comsumer.send(self.merge_msgs.clone());
             }
             self.merge_msgs.clear();

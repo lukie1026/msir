@@ -11,17 +11,26 @@ pub mod error;
 pub mod gop;
 pub mod hub;
 
+type HubToSubsChanTx = mpsc::UnboundedSender<Vec<RtmpMessage>>;
+type HubToSubsChanRx = mpsc::UnboundedReceiver<Vec<RtmpMessage>>;
+
+type MgrToHubChanTx = mpsc::UnboundedSender<HubEvent>;
+type MgrToHubChanRx = mpsc::UnboundedReceiver<HubEvent>;
+
+pub type ConnToMgrChanTx = mpsc::UnboundedSender<StreamEvent>;
+pub type ConnToMgrChanRx = mpsc::UnboundedReceiver<StreamEvent>;
+
 #[derive(Debug)]
 pub enum RoleType {
-    Consumer,
-    Producer,
+    Subscriber,
+    Publisher,
 }
 
 #[derive(Debug)]
 pub enum Token {
     Failure(StreamError),
-    ProducerToken(Hub),
-    ComsumerToken(mpsc::UnboundedReceiver<Vec<RtmpMessage>>),
+    PublisherToken(Hub),
+    SubscriberToken(HubToSubsChanRx),
 }
 
 #[derive(Debug)]
@@ -44,21 +53,21 @@ pub enum StreamEvent {
 }
 
 pub struct Manager {
-    pool: HashMap<String, mpsc::UnboundedSender<HubEvent>>,
-    receiver: mpsc::UnboundedReceiver<StreamEvent>,
+    pool: HashMap<String, MgrToHubChanTx>,
+    conn_rx: ConnToMgrChanRx,
 }
 
 impl Manager {
-    pub fn new(receiver: mpsc::UnboundedReceiver<StreamEvent>) -> Self {
+    pub fn new(rx: ConnToMgrChanRx) -> Self {
         Self {
-            receiver,
+            conn_rx: rx,
             pool: HashMap::new(),
         }
     }
 
     pub async fn run(mut self) -> Result<(), StreamError> {
         info!("Straem Manager daemon start...");
-        while let Some(ev) = self.receiver.recv().await {
+        while let Some(ev) = self.conn_rx.recv().await {
             match ev {
                 StreamEvent::Register(ev) => self.register(ev).await,
                 StreamEvent::Unregister(ev) => self.unregister(ev).await,
@@ -77,22 +86,22 @@ impl Manager {
             hub_ev_tx.is_some(),
         );
         let token = match ev.role {
-            RoleType::Producer => {
+            RoleType::Publisher => {
                 if hub_ev_tx.is_some() {
                     Token::Failure(StreamError::DuplicatePublish)
                 } else {
                     let (tx, rx) = mpsc::unbounded_channel();
                     self.pool.insert(ev.stream_key, tx);
-                    Token::ProducerToken(Hub::new(rx))
+                    Token::PublisherToken(Hub::new(rx))
                 }
             }
-            RoleType::Consumer => {
+            RoleType::Subscriber => {
                 if let Some(hub_ev_tx) = hub_ev_tx {
                     let (tx, rx) = mpsc::unbounded_channel();
-                    if let Err(_) = hub_ev_tx.send(HubEvent::ComsumerJoin(ev.uid, tx)) {
+                    if let Err(_) = hub_ev_tx.send(HubEvent::SubscriberJoin(ev.uid, tx)) {
                         Token::Failure(StreamError::DisconnectHub)
                     } else {
-                        Token::ComsumerToken(rx)
+                        Token::SubscriberToken(rx)
                     }
                 } else {
                     Token::Failure(StreamError::NoPublish)
@@ -106,19 +115,16 @@ impl Manager {
 
     async fn unregister(&mut self, ev: UnregisterEv) {
         let hub_ev_tx = self.pool.get(&ev.stream_key);
-        debug!(
-            "Recv unregister {:?} {:?} {:?}",
-            ev.uid, ev.role, ev.stream_key
-        );
+        debug!("Recv unregister {} {:?} {}", ev.uid, ev.role, ev.stream_key);
 
         if let Some(hub_ev_tx) = hub_ev_tx {
             match ev.role {
-                RoleType::Consumer => {
-                    if let Err(_) = hub_ev_tx.send(HubEvent::ComsumerLeave(ev.uid)) {
+                RoleType::Subscriber => {
+                    if let Err(_) = hub_ev_tx.send(HubEvent::SubscriberLeave(ev.uid)) {
                         warn!("Send unregister to hub failed");
                     }
                 }
-                RoleType::Producer => {
+                RoleType::Publisher => {
                     self.pool.remove(&ev.stream_key);
                 }
             }

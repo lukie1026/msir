@@ -1,7 +1,6 @@
 use crate::rtmp_server::rtmp_server_start;
 use msir_service::statistic::{StatEvent, Statistic};
 use msir_service::stream::{Manager, StreamEvent};
-use rtmp::connection::client::Client;
 use std::error::Error;
 use std::io;
 use std::time::Duration;

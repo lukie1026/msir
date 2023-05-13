@@ -1,17 +1,21 @@
 use anyhow::Result;
 use futures::FutureExt;
 use msir_core::transport::Transport;
-use msir_service::{rtmp_service::RtmpService, statistic::StatEvent, stream::StreamEvent, utils};
+use msir_service::{
+    rtmp_service::RtmpService,
+    statistic::ConnToStatChanTx,
+    stream::ConnToMgrChanTx,
+    utils,
+};
 use std::env;
 use tokio::{
     net::{TcpListener, TcpStream},
-    sync::mpsc,
 };
 use tracing::{error, info, Instrument};
 
 pub async fn rtmp_server_start(
-    stream_tx: mpsc::UnboundedSender<StreamEvent>,
-    stat_tx: mpsc::UnboundedSender<StatEvent>,
+    stream_tx: ConnToMgrChanTx,
+    stat_tx: ConnToStatChanTx,
 ) -> Result<()> {
     let listen_addr = env::args()
         .nth(1)
@@ -40,8 +44,8 @@ pub async fn rtmp_server_start(
 async fn rtmp_service(
     inbound: TcpStream,
     uid: String,
-    stream: mpsc::UnboundedSender<StreamEvent>,
-    stat: mpsc::UnboundedSender<StatEvent>,
+    stream: ConnToMgrChanTx,
+    stat: ConnToStatChanTx,
 ) -> Result<()> {
     RtmpService::new(Transport::new(inbound), Some(uid), stream, stat)
         .await?

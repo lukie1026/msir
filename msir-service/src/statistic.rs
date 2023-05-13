@@ -9,6 +9,9 @@ use tracing::info;
 
 const STREAM_PRINT_INTVAL: Duration = Duration::from_secs(10);
 
+pub type ConnToStatChanTx = mpsc::UnboundedSender<StatEvent>;
+pub type ConnToStatChanRx = mpsc::UnboundedReceiver<StatEvent>;
+
 pub enum StatEvent {
     CreateConn(String, ConnStat),
     DeleteConn(String, ConnStat),
@@ -16,13 +19,13 @@ pub enum StatEvent {
 }
 
 pub struct Statistic {
-    rx: mpsc::UnboundedReceiver<StatEvent>,
+    rx: ConnToStatChanRx,
     conns: HashMap<String, ConnStat>,
     streams: HashMap<String, StreamStat>,
 }
 
 impl Statistic {
-    pub fn new(rx: mpsc::UnboundedReceiver<StatEvent>) -> Self {
+    pub fn new(rx: ConnToStatChanRx) -> Self {
         Self {
             rx,
             conns: HashMap::new(),

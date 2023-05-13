@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use crate::{
     error::ServiceError,
-    statistic::{ConnStat, StatEvent},
-    stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
+    statistic::{ConnStat, ConnToStatChanTx, StatEvent},
+    stream::{ConnToMgrChanTx, RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
     utils,
 };
 use msir_core::transport::Transport;
@@ -11,7 +11,6 @@ use rtmp::connection::RtmpConnType;
 use rtmp::connection::{server as rtmp_conn, RtmpCtrlAction};
 use rtmp::message::request::Request;
 use rtmp::message::RtmpMessage;
-use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, trace, warn};
 
@@ -21,16 +20,16 @@ const PERF_MERGE_SEND_MSG: u32 = 350;
 pub struct RtmpService {
     uid: String,
     rtmp: rtmp_conn::Server,
-    mgr_tx: mpsc::UnboundedSender<StreamEvent>,
-    stat_tx: mpsc::UnboundedSender<StatEvent>,
+    mgr_tx: ConnToMgrChanTx,
+    stat_tx: ConnToStatChanTx,
 }
 
 impl RtmpService {
     pub async fn new(
         io: Transport,
         uid: Option<String>,
-        mgr_tx: mpsc::UnboundedSender<StreamEvent>,
-        stat_tx: mpsc::UnboundedSender<StatEvent>,
+        mgr_tx: ConnToMgrChanTx,
+        stat_tx: ConnToStatChanTx,
     ) -> Result<Self, ServiceError> {
         let rtmp = rtmp_conn::Server::new(io).await?;
         let uid = uid.unwrap_or_else(|| utils::gen_uid());
@@ -82,8 +81,8 @@ impl RtmpService {
     async fn register(&self, req: &Request) -> Result<Token, ServiceError> {
         let stream_key = req.app_stream();
         let role = match req.conn_type.is_publish() {
-            true => RoleType::Producer,
-            false => RoleType::Consumer,
+            true => RoleType::Publisher,
+            false => RoleType::Subscriber,
         };
         let (reg_tx, reg_rx) = oneshot::channel();
         let msg = StreamEvent::Register(RegisterEv {
@@ -118,8 +117,8 @@ impl RtmpService {
     async fn unregister(&mut self, req: &Request) {
         let stream_key = req.app_stream();
         let role = match req.conn_type.is_publish() {
-            true => RoleType::Producer,
-            false => RoleType::Consumer,
+            true => RoleType::Publisher,
+            false => RoleType::Subscriber,
         };
         let msg = StreamEvent::Unregister(UnregisterEv {
             uid: self.uid.clone(),
@@ -145,7 +144,7 @@ impl RtmpService {
         token: Token,
     ) -> Result<Option<RtmpCtrlAction>, ServiceError> {
         let mut rx = match token {
-            Token::ComsumerToken(rx) => rx,
+            Token::SubscriberToken(rx) => rx,
             _ => return Err(ServiceError::InvalidToken),
         };
         let mut merge_msgs = Vec::with_capacity(128);
@@ -226,7 +225,7 @@ impl RtmpService {
         token: Token,
     ) -> Result<Option<RtmpCtrlAction>, ServiceError> {
         let mut hub = match token {
-            Token::ProducerToken(hub) => hub,
+            Token::PublisherToken(hub) => hub,
             _ => return Err(ServiceError::InvalidToken),
         };
         let stream_key = req.app_stream();
