@@ -103,9 +103,10 @@ impl Hub {
 
     pub fn on_frame(&mut self, msg: RtmpMessage) -> Result<(), StreamError> {
         for (_, comsumer) in self.comsumers.iter() {
-            if let Err(e) = comsumer.send(msg.clone()) {
-                warn!("Hub send avdata to comsumer failed: {:?}", e);
-            }
+            // if let Err(e) = comsumer.send(msg.clone()) {
+            //     warn!("Hub send avdata to comsumer failed: {:?}", e);
+            // }
+            let _ = comsumer.send(msg.clone());
         }
 
         match &msg {

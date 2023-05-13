@@ -15,6 +15,8 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, trace, warn};
 
+const CONN_PRINT_INTVAL: Duration = Duration::from_secs(5);
+
 pub struct RtmpService {
     uid: String,
     rtmp: rtmp_conn::Server,
@@ -150,7 +152,7 @@ impl RtmpService {
         let mut cache_size = 0;
         let mut start_ts = 0;
         let stream_key = req.app_stream();
-        let mut stat_report = tokio::time::interval(Duration::from_secs(5));
+        let mut stat_report = tokio::time::interval(CONN_PRINT_INTVAL);
         loop {
             tokio::select! {
                 msg = self.rtmp.recv_message() => {
@@ -221,7 +223,7 @@ impl RtmpService {
             _ => return Err(ServiceError::InvalidToken),
         };
         let stream_key = req.app_stream();
-        let mut stat_report = tokio::time::interval(Duration::from_secs(5));
+        let mut stat_report = tokio::time::interval(CONN_PRINT_INTVAL);
         loop {
             tokio::select! {
                 msg = self.rtmp.recv_message() => {

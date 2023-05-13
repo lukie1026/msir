@@ -11,7 +11,7 @@ pub static NOTIMEOUT: Duration = Duration::MAX;
 
 #[derive(Debug, Error)]
 pub enum TransportError {
-    #[error("End of file")]
+    #[error("Read closed by peer")]
     EndOfFile,
 
     #[error("An IO error occurred: {0}")]

@@ -70,7 +70,7 @@ impl Manager {
     async fn register(&mut self, ev: RegisterEv) {
         let hub_ev_tx = self.pool.get(&ev.stream_key);
         debug!(
-            "Recv register {:?} {:?} {:?} exist {}",
+            "Recv register {} {:?} {} exist {}",
             ev.uid,
             ev.role,
             ev.stream_key,

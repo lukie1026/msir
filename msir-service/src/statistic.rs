@@ -1,8 +1,13 @@
 use msir_core::utils;
 use rtmp::connection::RtmpConnType;
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 use tokio::sync::mpsc;
 use tracing::info;
+
+const STREAM_PRINT_INTVAL: Duration = Duration::from_secs(10);
 
 pub enum StatEvent {
     CreateConn(String, ConnStat),
@@ -42,9 +47,10 @@ impl Statistic {
         // TODO: RemoteIngester need to first call than player
         let stream = self
             .streams
-            .entry(stream_key)
+            .entry(stream_key.clone())
             .or_insert(StreamStat::new(utils::current_time(), conn_type));
         stream.clients += 1;
+        stream.can_print(&stream_key, Instant::now());
     }
 
     fn on_update_conn(&mut self, uid: String, stat: ConnStat) {
@@ -62,6 +68,7 @@ impl Statistic {
                     s.audio = stat.audio_count;
                     s.video = stat.video_count;
                     s.recv_bytes = stat.recv_bytes;
+                    s.can_print(&conn.stream_key, Instant::now());
                 } else {
                     s.send_bytes += delta_send_bytes;
                 }
@@ -74,10 +81,11 @@ impl Statistic {
         match stat.conn_type.is_publish() {
             true => {
                 self.streams.remove(&stat.stream_key);
+                info!("StreamStats {} removed", stat.stream_key);
             }
             false => {
                 self.streams.get_mut(&stat.stream_key).map(|s| {
-                    s.clients += 1;
+                    s.clients -= 1;
                     conn.map(|c| {
                         s.send_bytes += stat.send_bytes - c.send_bytes;
                     })
@@ -87,8 +95,7 @@ impl Statistic {
     }
 }
 
-#[derive(Debug)]
-pub struct StreamStat {
+struct StreamStat {
     audio: u64,
     video: u64,
     recv_bytes: u64,
@@ -96,6 +103,11 @@ pub struct StreamStat {
     publish_type: RtmpConnType,
     start_time: u32,
     clients: u32,
+    // Last record for log print
+    last_logged: Option<Instant>,
+    last_video: u64,
+    last_recv_bytes: u64,
+    last_send_bytes: u64,
 }
 
 impl StreamStat {
@@ -108,7 +120,38 @@ impl StreamStat {
             clients: 0,
             publish_type,
             start_time,
+            last_logged: None,
+            last_video: 0,
+            last_recv_bytes: 0,
+            last_send_bytes: 0,
         }
+    }
+
+    fn can_print(&mut self, stream: &str, now: Instant) {
+        let dur = self.last_logged.map(|last| now.duration_since(last));
+        let mut fps = 0;
+        let mut recv_rate = 0;
+        let mut send_rate = 0;
+        if let Some(d) = dur {
+            if d < STREAM_PRINT_INTVAL {
+                return;
+            }
+            fps = (self.video - self.last_video) / d.as_secs();
+            recv_rate = (self.recv_bytes - self.last_recv_bytes) / d.as_secs();
+            send_rate = (self.send_bytes - self.last_send_bytes) / d.as_secs();
+        }
+        self.last_logged = Some(now);
+        self.last_video = self.video;
+        self.last_recv_bytes = self.recv_bytes;
+        self.last_send_bytes = self.send_bytes;
+        info!(
+            "StreamStats {} has clients {}, fps={}, in={}, out={}",
+            stream,
+            self.clients,
+            fps,
+            format_bw(recv_rate),
+            format_bw(send_rate)
+        );
     }
 }
 
@@ -135,4 +178,21 @@ impl ConnStat {
             video_count: 0,
         }
     }
+}
+
+const KBIT: u64 = 1024;
+const MBIT: u64 = 1024 * 1024;
+const GBIT: u64 = 1024 * 1024 * 1024;
+fn format_bw(bytes: u64) -> String {
+    let b = bytes * 8;
+    if b >= GBIT {
+        return format!("{:.2} Gb", b as f32 / GBIT as f32);
+    }
+    if b >= MBIT {
+        return format!("{:.2} Mb", b as f32 / MBIT as f32);
+    }
+    if b >= KBIT {
+        return format!("{:.2} Kb", b as f32 / KBIT as f32);
+    }
+    format!("{}b", b)
 }
