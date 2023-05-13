@@ -1,6 +1,6 @@
-use url::Url;
 use super::error::ReuquestError;
 use crate::connection::RtmpConnType;
+use url::Url;
 
 #[derive(Debug)]
 pub struct Request {

@@ -21,7 +21,7 @@ pub enum RoleType {
 pub enum Token {
     Failure(StreamError),
     ProducerToken(Hub),
-    ComsumerToken(mpsc::UnboundedReceiver<RtmpMessage>),
+    ComsumerToken(mpsc::UnboundedReceiver<Vec<RtmpMessage>>),
 }
 
 #[derive(Debug)]

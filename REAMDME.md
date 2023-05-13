@@ -1,6 +1,6 @@
 # TODO
 ## Global
-- [ ] optimize log and display trait of RtmpMessage
+- [x] optimize log and display trait of RtmpMessage
 - [ ] redefine error
 
 ## Protocol/rtmp-handshake
@@ -11,7 +11,7 @@
 
 ## Protocol/rtmp-chunk
 - [x] refine ChunkCodec::send_rtmp_messages, maybe no need to use write_vectored for BufStream enabled
-- [ ] add IO stats
+- [x] add IO stats
 
 ## Protocol/rtmp-server
 - [ ] redirect
@@ -22,14 +22,14 @@
 - [ ] 
 
 ## Service/rtmp-service
-- [ ] replace uuid
+- [x] replace uuid
 
 ## Service/stream/hub
 - [ ] on_aggr
 
 ## Transports
-- [ ] read/write timeout
-- [ ] stats: kbps, bytes
+- [ ] read/write timeout, coding ok, todo test
+- [x] stats: kbps, bytes
 - [ ] set read/write buffer
 - [ ] merge read/write
 
@@ -38,5 +38,6 @@
 - [ ] Merge write 350ms
 
 # BUG
-- [ ] 150路推流，300路拉流的压测场景下，会有概率出现推流断流
-- [ ] 推流因超时断开后，stream manager中没有删除该条流记录
+- [x] 150路推流，300路拉流的压测场景下，会有概率出现推流断流
+- [x] 推流因超时断开后，stream manager中没有删除该条流记录
+- [ ] 首帧比较慢原因分析

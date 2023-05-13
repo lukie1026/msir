@@ -11,7 +11,7 @@ use tracing_subscriber;
 
 mod rtmp_server;
 
-//#[tokio::main(worker_threads = 8)]
+// #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
     let file_appender = tracing_appender::rolling::never("/tmp", "tracing.log");

@@ -1,10 +1,12 @@
+use crate::codec;
+
+use self::types::{amf0_command_type::*, rtmp_sig::*, rtmp_status::*, *};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{Buf, Bytes};
 use error::{MessageDecodeError, MessageEncodeError};
 use rml_amf0;
 use rml_amf0::Amf0Value;
 use std::{collections::HashMap, fmt, io::Cursor};
-use self::types::{amf0_command_type::*, rtmp_sig::*, rtmp_status::*, *};
 
 pub mod error;
 pub mod request;
@@ -380,6 +382,13 @@ impl RtmpMessage {
             RtmpMessage::AudioData { timestamp, .. } => Some(*timestamp),
             _ => None,
         }
+    }
+
+    pub fn is_key_frame(&self) -> bool {
+        if let RtmpMessage::VideoData { payload, .. } = self {
+            return codec::is_video_keyframe(payload);
+        }
+        false
     }
 }
 

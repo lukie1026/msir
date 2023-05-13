@@ -16,6 +16,7 @@ use tokio::sync::oneshot;
 use tracing::{debug, error, info, trace, warn};
 
 const CONN_PRINT_INTVAL: Duration = Duration::from_secs(5);
+const PERF_MERGE_SEND_MSG: u32 = 350;
 
 pub struct RtmpService {
     uid: String,
@@ -147,9 +148,9 @@ impl RtmpService {
             Token::ComsumerToken(rx) => rx,
             _ => return Err(ServiceError::InvalidToken),
         };
-        let mut msgs = Vec::with_capacity(128);
+        let mut merge_msgs = Vec::with_capacity(128);
         let mut pause = false;
-        let mut cache_size = 0;
+        let mut merge_size = 0;
         let mut start_ts = 0;
         let stream_key = req.app_stream();
         let mut stat_report = tokio::time::interval(CONN_PRINT_INTVAL);
@@ -177,23 +178,29 @@ impl RtmpService {
                         Err(err) => return Err(ServiceError::ConnectionError(err)),
                     }
                 }
-                msg = rx.recv() => {
-                    match msg {
-                        Some(msg) => {
+                msgs = rx.recv() => {
+                    match msgs {
+                        Some(msgs) => {
                             if pause {
                                 continue;
                             }
-                            let cur_ts = msg.timestamp().unwrap_or(0);
-                            cache_size += msg.len().unwrap_or(0);
-                            msgs.push(msg);
-                            // Merge msgs in 350ms for performance, but will be harmful to latency
-                            // TODO: rasie the priority of I frame
-                            if cur_ts >= (start_ts + 350) || cur_ts == 0 || cur_ts < start_ts {
-                                trace!("Merged send msgs len {} total_size {}", msgs.len(), cache_size);
-                                self.rtmp.send_messages(&msgs, 0, 0).await?;
-                                msgs.clear();
+                            let mut cur_ts = 0;
+                            let mut has_key_frame = false;
+                            for msg in msgs {
+                                if !has_key_frame {
+                                    has_key_frame = msg.is_key_frame();
+                                }
+                                cur_ts = msg.timestamp().unwrap_or(0);
+                                merge_size += msg.len().unwrap_or(0);
+                                merge_msgs.push(msg);
+                            }
+                            // Merge-send msgs to player in PERF_MERGE_SEND_MSG for improve performance
+                            if cur_ts >= (start_ts + PERF_MERGE_SEND_MSG) || cur_ts == 0 || cur_ts < start_ts || has_key_frame {
+                                trace!("Merged send msgs len {} total_size {}", merge_msgs.len(), merge_size);
+                                self.rtmp.send_messages(&merge_msgs, 0, 0).await?;
+                                merge_msgs.clear();
                                 start_ts = cur_ts;
-                                cache_size = 0;
+                                merge_size = 0;
                             }
                         }
                         None => return Err(ServiceError::PublishDone)

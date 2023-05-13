@@ -1,13 +1,13 @@
-use std::collections::HashMap;
-
+use super::{error::StreamError, gop::GopCache};
 use rtmp::{codec, message::RtmpMessage};
+use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tracing::{debug, info, trace, warn};
 
-use super::{error::StreamError, gop::GopCache};
+const PERF_MERGE_SEND_CHAN: u32 = 170;
 
 pub enum HubEvent {
-    ComsumerJoin(String, mpsc::UnboundedSender<RtmpMessage>),
+    ComsumerJoin(String, mpsc::UnboundedSender<Vec<RtmpMessage>>),
     ComsumerLeave(String),
 }
 
@@ -23,7 +23,9 @@ pub struct Hub {
     meta: MetaCache,
     pub gop: GopCache,
     pub receiver: mpsc::UnboundedReceiver<HubEvent>,
-    pub comsumers: HashMap<String, mpsc::UnboundedSender<RtmpMessage>>,
+    pub comsumers: HashMap<String, mpsc::UnboundedSender<Vec<RtmpMessage>>>,
+    merge_msgs: Vec<RtmpMessage>,
+    start_ts: u32,
 }
 
 impl Hub {
@@ -33,6 +35,8 @@ impl Hub {
             meta: MetaCache::default(),
             receiver: rx,
             comsumers: HashMap::new(),
+            merge_msgs: Vec::with_capacity(64),
+            start_ts: 0,
         }
     }
 
@@ -44,32 +48,28 @@ impl Hub {
                         let mut sent_meta = 0;
                         let mut sent_sh = 0;
                         let mut sent_frame = 0;
+                        let mut msgs = Vec::with_capacity(self.gop.caches.len() + 3);
                         // send metadata
                         if let Some(meta) = &self.meta.metadata {
                             sent_meta += 1;
-                            if let Err(e) = tx.send(meta.clone()) {
-                                warn!("Hub send metadata to comsumer failed: {:?}", e);
-                            }
+                            msgs.push(meta.clone());
                         }
                         // send audio sequence heade
                         if let Some(meta) = &self.meta.audio_sh {
                             sent_sh += 1;
-                            if let Err(e) = tx.send(meta.clone()) {
-                                warn!("Hub send audio sh to comsumer failed: {:?}", e);
-                            }
+                            msgs.push(meta.clone());
                         }
                         // send video sequence heade
                         if let Some(meta) = &self.meta.video_sh {
                             sent_sh += 1;
-                            if let Err(e) = tx.send(meta.clone()) {
-                                warn!("Hub send video sh to comsumer failed: {:?}", e);
-                            }
+                            msgs.push(meta.clone());
                         }
                         // send gopcache
                         for msg in self.gop.caches.iter() {
-                            if let Err(e) = tx.send(msg.clone()) {
-                                warn!("Hub send avdata to comsumer failed: {:?}", e);
-                            }
+                            msgs.push(msg.clone());
+                        }
+                        if let Err(_) = tx.send(msgs) {
+                            warn!("Hub send frame to comsumer failed");
                         }
                         sent_frame += self.gop.caches.len();
                         debug!(
@@ -92,21 +92,30 @@ impl Hub {
 
     pub fn on_metadata(&mut self, msg: RtmpMessage) -> Result<(), StreamError> {
         debug!("Recv metadata {}", msg);
-        self.meta.metadata = Some(msg.clone());
         for (_, comsumer) in self.comsumers.iter() {
-            if let Err(e) = comsumer.send(msg.clone()) {
+            if let Err(e) = comsumer.send(vec![msg.clone()]) {
                 warn!("Hub send metadata to comsumer failed: {:?}", e);
             }
         }
+        self.meta.metadata = Some(msg);
         Ok(())
     }
 
     pub fn on_frame(&mut self, msg: RtmpMessage) -> Result<(), StreamError> {
-        for (_, comsumer) in self.comsumers.iter() {
-            // if let Err(e) = comsumer.send(msg.clone()) {
-            //     warn!("Hub send avdata to comsumer failed: {:?}", e);
-            // }
-            let _ = comsumer.send(msg.clone());
+        let cur_ts = msg.timestamp().unwrap_or(0);
+        self.merge_msgs.push(msg.clone());
+        let has_key_frame = msg.is_key_frame();
+        // Merge-send msgs to channel in PERF_MERGE_SEND_CHAN for improve performance in mutli-thread mode
+        if cur_ts >= (self.start_ts + PERF_MERGE_SEND_CHAN)
+            || cur_ts == 0
+            || cur_ts < self.start_ts
+            || has_key_frame
+        {
+            for (_, comsumer) in self.comsumers.iter() {
+                let _ = comsumer.send(self.merge_msgs.clone());
+            }
+            self.merge_msgs.clear();
+            self.start_ts = cur_ts;
         }
 
         match &msg {
