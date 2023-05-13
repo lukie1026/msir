@@ -21,6 +21,10 @@ pub struct Context {
     in_ack_size: AckWindowSize,
     out_ack_size: AckWindowSize,
     in_buffer_length: u32,
+    in_auido_count: u64,
+    in_video_count: u64,
+    out_audio_count: u64,
+    out_video_count: u64,
 }
 
 impl Context {
@@ -31,6 +35,10 @@ impl Context {
             in_ack_size: AckWindowSize::default(),
             out_ack_size: AckWindowSize::default(),
             in_buffer_length: 0,
+            in_auido_count: 0,
+            in_video_count: 0,
+            out_audio_count: 0,
+            out_video_count: 0,
         }
     }
 
@@ -50,6 +58,22 @@ impl Context {
         self.chunk_io.get_send_bytes()
     }
 
+    pub fn get_in_audio_count(&mut self) -> u64 {
+        self.in_auido_count
+    }
+
+    pub fn get_in_video_count(&mut self) -> u64 {
+        self.in_video_count
+    }
+
+    pub fn get_out_audio_count(&mut self) -> u64 {
+        self.out_audio_count
+    }
+
+    pub fn get_out_video_count(&mut self) -> u64 {
+        self.out_video_count
+    }
+
     pub fn set_in_window_ack_size(&mut self, ack_size: u32) {
         self.in_ack_size.window = ack_size;
     }
@@ -64,6 +88,8 @@ impl Context {
         // TODO: try to response acknowledgement
         trace!("Recv {}", msg);
         match msg {
+            RtmpMessage::AudioData { .. } => self.in_auido_count += 1,
+            RtmpMessage::VideoData { .. } => self.in_video_count += 1,
             RtmpMessage::SetChunkSize { chunk_size } => {
                 let chunk_size = *chunk_size as usize;
                 if chunk_size < 128 || chunk_size > 65536 {
@@ -129,6 +155,8 @@ impl Context {
     fn on_send_message(&mut self, msg: &RtmpMessage) -> Result<(), ConnectionError> {
         trace!("Send {}", msg);
         match msg {
+            RtmpMessage::AudioData { .. } => self.out_audio_count += 1,
+            RtmpMessage::VideoData { .. } => self.out_video_count += 1,
             RtmpMessage::SetChunkSize { chunk_size } => {
                 self.chunk_io.set_out_chunk_size(*chunk_size as usize)
             }

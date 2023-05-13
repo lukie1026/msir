@@ -48,6 +48,20 @@ impl Server {
         self.ctx.get_send_bytes()
     }
 
+    pub fn get_audio_count(&mut self) -> u64 {
+        match self.conn_type.is_publish() {
+            true => self.ctx.get_in_audio_count(),
+            false => self.ctx.get_out_audio_count(),
+        }
+    }
+
+    pub fn get_video_count(&mut self) -> u64 {
+        match self.conn_type.is_publish() {
+            true => self.ctx.get_in_video_count(),
+            false => self.ctx.get_out_video_count(),
+        }
+    }
+
     pub async fn recv_message(&mut self) -> Result<RtmpMessage, ConnectionError> {
         self.ctx.recv_message().await
     }

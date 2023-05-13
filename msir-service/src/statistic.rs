@@ -1,7 +1,7 @@
 use msir_core::utils;
 use rtmp::connection::RtmpConnType;
 use std::collections::HashMap;
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc;
 use tracing::info;
 
 pub enum StatEvent {
@@ -17,7 +17,7 @@ pub struct Statistic {
 }
 
 impl Statistic {
-    pub fn new(rx: UnboundedReceiver<StatEvent>) -> Self {
+    pub fn new(rx: mpsc::UnboundedReceiver<StatEvent>) -> Self {
         Self {
             rx,
             conns: HashMap::new(),
@@ -49,43 +49,41 @@ impl Statistic {
 
     fn on_update_conn(&mut self, uid: String, stat: ConnStat) {
         if let Some(conn) = self.conns.get_mut(&uid) {
-            let delta_audio = stat.audio - conn.audio;
-            let delta_video = stat.video - conn.video;
-            let delta_recv_bytes = stat.recv_bytes - conn.recv_bytes;
             let delta_send_bytes = stat.send_bytes - conn.send_bytes;
-            conn.audio = stat.audio;
-            conn.video = stat.video;
+            conn.audio_count = stat.audio_count;
+            conn.video_count = stat.video_count;
             conn.recv_bytes = stat.recv_bytes;
             conn.send_bytes = stat.send_bytes;
             conn.conn_type = stat.conn_type;
             conn.stream_key = stat.stream_key;
 
-            if let Some(stream) = self.streams.get_mut(&conn.stream_key) {
+            self.streams.get_mut(&conn.stream_key).map(|s| {
                 if conn.conn_type.is_publish() {
-                    stream.audio += delta_audio;
-                    stream.video += delta_video;
-                    stream.recv_bytes += delta_recv_bytes;
-                    stream.send_bytes += delta_send_bytes;
+                    s.audio = stat.audio_count;
+                    s.video = stat.video_count;
+                    s.recv_bytes = stat.recv_bytes;
+                } else {
+                    s.send_bytes += delta_send_bytes;
                 }
-                if conn.conn_type.is_play() {
-                    stream.send_bytes += delta_send_bytes;
-                }
-            }
+            });
         }
     }
 
     fn on_delete_conn(&mut self, uid: String, stat: ConnStat) {
+        let conn = self.conns.remove(&uid);
         match stat.conn_type.is_publish() {
             true => {
                 self.streams.remove(&stat.stream_key);
             }
             false => {
-                self.streams
-                    .get_mut(&stat.stream_key)
-                    .map(|s| s.clients += 1);
+                self.streams.get_mut(&stat.stream_key).map(|s| {
+                    s.clients += 1;
+                    conn.map(|c| {
+                        s.send_bytes += stat.send_bytes - c.send_bytes;
+                    })
+                });
             }
         }
-        self.conns.remove(&uid);
     }
 }
 
@@ -116,13 +114,13 @@ impl StreamStat {
 
 #[derive(Debug)]
 pub struct ConnStat {
-    conn_time: u32,
-    stream_key: String,
-    conn_type: RtmpConnType,
+    pub conn_time: u32,
+    pub stream_key: String,
+    pub conn_type: RtmpConnType,
     pub recv_bytes: u64,
     pub send_bytes: u64,
-    pub audio: u64,
-    pub video: u64,
+    pub audio_count: u64,
+    pub video_count: u64,
 }
 
 impl ConnStat {
@@ -130,11 +128,11 @@ impl ConnStat {
         Self {
             stream_key,
             conn_type,
-            conn_time: 0, // TODO: get current time
+            conn_time: utils::current_time(),
             recv_bytes: 0,
             send_bytes: 0,
-            audio: 0,
-            video: 0,
+            audio_count: 0,
+            video_count: 0,
         }
     }
 }

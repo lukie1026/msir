@@ -1,10 +1,12 @@
+use std::time::Duration;
+
 use crate::{
     error::ServiceError,
     statistic::{ConnStat, StatEvent, Statistic},
     stream::{RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
     utils,
 };
-use msir_core::transport::Transport;
+use msir_core::{transport::Transport, utils::current_time};
 use rtmp::connection::RtmpConnType;
 use rtmp::connection::{server as rtmp_conn, RtmpCtrlAction};
 use rtmp::message::request::Request;
@@ -16,19 +18,27 @@ use tracing::{debug, error, info, trace, warn};
 pub struct RtmpService {
     uid: String,
     rtmp: rtmp_conn::Server,
+    mgr_tx: mpsc::UnboundedSender<StreamEvent>,
+    stat_tx: mpsc::UnboundedSender<StatEvent>,
 }
 
 impl RtmpService {
-    pub async fn new(io: Transport, uid: Option<String>) -> Result<Self, ServiceError> {
-        let rtmp = rtmp_conn::Server::new(io).await?;
-        let uid = uid.unwrap_or_else(|| utils::gen_uid());
-        Ok(Self { uid, rtmp })
-    }
-    pub async fn run(
-        &mut self,
+    pub async fn new(
+        io: Transport,
+        uid: Option<String>,
         mgr_tx: mpsc::UnboundedSender<StreamEvent>,
         stat_tx: mpsc::UnboundedSender<StatEvent>,
-    ) -> Result<(), ServiceError> {
+    ) -> Result<Self, ServiceError> {
+        let rtmp = rtmp_conn::Server::new(io).await?;
+        let uid = uid.unwrap_or_else(|| utils::gen_uid());
+        Ok(Self {
+            uid,
+            rtmp,
+            mgr_tx,
+            stat_tx,
+        })
+    }
+    pub async fn run(&mut self) -> Result<(), ServiceError> {
         loop {
             // connect with client and identify conn type
             let req = self.rtmp.identify_client().await?;
@@ -48,13 +58,13 @@ impl RtmpService {
                 }
                 _ => {}
             }
-            let token = self.register(&mgr_tx, &stat_tx, &req).await?;
+            let token = self.register(&req).await?;
             debug!("Register to hub");
             let ret = match req.conn_type.is_publish() {
                 true => self.publishing(&req, token).await,
                 false => self.playing(&req, token).await,
             };
-            self.unregister(&mgr_tx, &stat_tx, &req).await;
+            self.unregister(&req).await;
             debug!("Unegister to hub");
             match ret? {
                 Some(act) => match act {
@@ -66,12 +76,7 @@ impl RtmpService {
         }
     }
 
-    async fn register(
-        &mut self,
-        mgr_tx: &mpsc::UnboundedSender<StreamEvent>,
-        stat_tx: &mpsc::UnboundedSender<StatEvent>,
-        req: &Request,
-    ) -> Result<Token, ServiceError> {
+    async fn register(&self, req: &Request) -> Result<Token, ServiceError> {
         let stream_key = req.app_stream();
         let role = match req.conn_type.is_publish() {
             true => RoleType::Producer,
@@ -84,7 +89,7 @@ impl RtmpService {
             role,
             ret: reg_tx,
         });
-        if let Err(_) = mgr_tx.send(msg) {
+        if let Err(_) = self.mgr_tx.send(msg) {
             return Err(ServiceError::RegisterFailed(
                 "send register event failed".to_string(),
             ));
@@ -95,7 +100,7 @@ impl RtmpService {
                 if let Token::Failure(e) = token {
                     return Err(ServiceError::RegisterFailed(e.to_string()));
                 }
-                let _ = stat_tx.send(StatEvent::CreateConn(
+                let _ = self.stat_tx.send(StatEvent::CreateConn(
                     self.uid.clone(),
                     ConnStat::new(stream_key, req.conn_type.clone()),
                 ));
@@ -107,12 +112,7 @@ impl RtmpService {
         }
     }
 
-    async fn unregister(
-        &mut self,
-        mgr_tx: &mpsc::UnboundedSender<StreamEvent>,
-        stat_tx: &mpsc::UnboundedSender<StatEvent>,
-        req: &Request,
-    ) {
+    async fn unregister(&mut self, req: &Request) {
         let stream_key = req.app_stream();
         let role = match req.conn_type.is_publish() {
             true => RoleType::Producer,
@@ -123,14 +123,17 @@ impl RtmpService {
             stream_key: stream_key.clone(),
             role,
         });
-        if let Err(e) = mgr_tx.send(msg) {
+        if let Err(e) = self.mgr_tx.send(msg) {
             warn!("send unregister event failed: {}", e);
         }
-        // TODO: add stats
-        let _ = stat_tx.send(StatEvent::DeleteConn(
-            self.uid.clone(),
-            ConnStat::new(stream_key, req.conn_type.clone()),
-        ));
+        let _ = self.stat_tx.send(StatEvent::DeleteConn(self.uid.clone(), {
+            let mut conn = ConnStat::new(stream_key, req.conn_type.clone());
+            conn.recv_bytes = self.rtmp.get_recv_bytes();
+            conn.send_bytes = self.rtmp.get_send_bytes();
+            conn.audio_count = self.rtmp.get_audio_count();
+            conn.video_count = self.rtmp.get_video_count();
+            conn
+        }));
     }
 
     async fn playing(
@@ -146,6 +149,8 @@ impl RtmpService {
         let mut pause = false;
         let mut cache_size = 0;
         let mut start_ts = 0;
+        let stream_key = req.app_stream();
+        let mut stat_report = tokio::time::interval(Duration::from_secs(5));
         loop {
             tokio::select! {
                 msg = self.rtmp.recv_message() => {
@@ -192,6 +197,16 @@ impl RtmpService {
                         None => return Err(ServiceError::PublishDone)
                     }
                 }
+                _ = stat_report.tick() => {
+                    let _ = self.stat_tx.send(StatEvent::UpdateConn(self.uid.clone(), {
+                        let mut conn = ConnStat::new(stream_key.clone(), req.conn_type.clone());
+                        conn.recv_bytes = self.rtmp.get_recv_bytes();
+                        conn.send_bytes = self.rtmp.get_send_bytes();
+                        conn.audio_count = self.rtmp.get_audio_count();
+                        conn.video_count = self.rtmp.get_video_count();
+                        conn
+                    }));
+                }
             }
         }
     }
@@ -205,6 +220,8 @@ impl RtmpService {
             Token::ProducerToken(hub) => hub,
             _ => return Err(ServiceError::InvalidToken),
         };
+        let stream_key = req.app_stream();
+        let mut stat_report = tokio::time::interval(Duration::from_secs(5));
         loop {
             tokio::select! {
                 msg = self.rtmp.recv_message() => {
@@ -233,6 +250,16 @@ impl RtmpService {
                     if let Err(e) = ret {
                         return Err(ServiceError::HubError(e));
                     }
+                }
+                _ = stat_report.tick() => {
+                    let _ = self.stat_tx.send(StatEvent::UpdateConn(self.uid.clone(), {
+                        let mut conn = ConnStat::new(stream_key.clone(), req.conn_type.clone());
+                        conn.recv_bytes = self.rtmp.get_recv_bytes();
+                        conn.send_bytes = self.rtmp.get_send_bytes();
+                        conn.audio_count = self.rtmp.get_audio_count();
+                        conn.video_count = self.rtmp.get_video_count();
+                        conn
+                    }));
                 }
             }
         }

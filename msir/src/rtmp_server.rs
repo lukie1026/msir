@@ -43,9 +43,9 @@ async fn rtmp_service(
     stream: mpsc::UnboundedSender<StreamEvent>,
     stat: mpsc::UnboundedSender<StatEvent>,
 ) -> Result<()> {
-    RtmpService::new(Transport::new(inbound), Some(uid))
+    RtmpService::new(Transport::new(inbound), Some(uid), stream, stat)
         .await?
-        .run(stream, stat)
+        .run()
         .await?;
     Ok(())
 }
