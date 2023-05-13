@@ -8,6 +8,7 @@
 
 ## Protocol/rtmp-codec
 - [ ] improvement
+- [ ] support hevc && av1
 
 ## Protocol/rtmp-chunk
 - [x] refine ChunkCodec::send_rtmp_messages, maybe no need to use write_vectored for BufStream enabled

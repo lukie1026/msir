@@ -1,6 +1,9 @@
 use crate::codec;
 
-use self::types::{amf0_command_type::*, rtmp_sig::*, rtmp_status::*, *};
+use self::{
+    request::Request,
+    types::{amf0_command_type::*, rtmp_sig::*, rtmp_status::*, *},
+};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{Buf, Bytes};
 use error::{MessageDecodeError, MessageEncodeError};
@@ -86,6 +89,22 @@ impl RtmpMessage {
         return RtmpMessage::Amf0Command {
             command_name: COMMAND_ON_BW_DONE.to_string(),
             transaction_id: 0.0,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![],
+        };
+    }
+    pub fn new_play_stream(stream_name: String) -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_PLAY.to_string(),
+            transaction_id: 0.0,
+            command_object: Amf0Value::Null,
+            additional_arguments: vec![Amf0Value::Utf8String(stream_name)],
+        };
+    }
+    pub fn new_create_stream() -> Self {
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_CREATE_STREAM.to_string(),
+            transaction_id: 2.0,
             command_object: Amf0Value::Null,
             additional_arguments: vec![],
         };
@@ -305,6 +324,41 @@ impl RtmpMessage {
                 STATUS_CODE,
                 Amf0Value::Utf8String(STATUS_CODE_DATA_START.to_string()),
             )])],
+        };
+    }
+    pub fn new_connect_app(req: &Request, uid: String) -> Self {
+        let app = match req.tc_url.path_segments() {
+            Some(split) => {
+                let apps: Vec<&str> = split.collect();
+                apps[0]
+            }
+            None => "",
+        };
+        return RtmpMessage::Amf0Command {
+            command_name: COMMAND_CONNECT.to_string(),
+            transaction_id: 1.0,
+            command_object: fast_create_amf0_obj(vec![
+                ("app", Amf0Value::Utf8String(app.to_string())),
+                (
+                    "flashVer",
+                    Amf0Value::Utf8String("WIN 15,0,0,239".to_string()),
+                ),
+                ("swfUrl", Amf0Value::Utf8String("".to_string())),
+                // TODO: add query to tc_url
+                ("tc_url", Amf0Value::Utf8String(req.tc_url.to_string())),
+                ("fpad", Amf0Value::Boolean(false)),
+                ("capabilities", Amf0Value::Number(239.0)),
+                ("audioCodecs", Amf0Value::Number(3575.0)),
+                ("videoCodecs", Amf0Value::Number(252.0)),
+                ("videoFunction", Amf0Value::Number(1.0)),
+                ("pageUrl", Amf0Value::Utf8String("".to_string())),
+                ("objectEncoding", Amf0Value::Number(0.0)),
+            ]),
+            additional_arguments: vec![fast_create_amf0_obj(vec![
+                // FIXME: do not hardcode
+                ("msir_version", Amf0Value::Utf8String("v0.1.0".to_string())),
+                ("msir_uid", Amf0Value::Utf8String(uid)),
+            ])],
         };
     }
     pub fn new_connect_app_res(object_encoding: f64) -> Self {

@@ -42,20 +42,16 @@ impl Server {
 pub struct Client {
     simple: simple_hs::SimpleHandshake,
     ctx: context::Context,
-    io: Transport,
 }
 
 impl Client {
-    pub fn new(io: Transport) -> Self {
+    pub fn new() -> Self {
         Self {
             simple: simple_hs::SimpleHandshake {},
             ctx: context::Context::new(),
-            io,
         }
     }
-    pub async fn handshake(&mut self) -> Result<(), HandshakeError> {
-        self.simple
-            .handshake_with_client(&mut self.ctx, &mut self.io)
-            .await
+    pub async fn handshake(&mut self, io: &mut Transport) -> Result<(), HandshakeError> {
+        self.simple.handshake_with_server(&mut self.ctx, io).await
     }
 }
