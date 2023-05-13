@@ -19,22 +19,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::TRACE)
+        .with_max_level(tracing::Level::DEBUG)
         .with_writer(io::stdout)
         .with_writer(non_blocking) // write to file
         .with_ansi(false) // disable color if write to file
         .init();
 
     info!("MSIR start...");
-
-    // Lukie TODO:
-    // let mut rtmp = Client::new("testuid".to_string(), "rtmp://127.0.0.1/live-bvc".to_string(), "live_0".to_string()).await?;
-    // info!("Lukie new client handshake succeed");
-    // let sid = rtmp.connect().await?;
-    // info!("Lukie new client connect succeed");
-    // rtmp.play("live_10".to_string(), sid as u32).await?;
-    // info!("Lukie new client play succeed");
-    // return Ok(());
 
     let stat_tx = statistic_bg_start();
     let stream_tx = stream_mgr_start();

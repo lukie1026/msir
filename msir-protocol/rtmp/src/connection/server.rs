@@ -114,11 +114,11 @@ impl Server {
                 };
                 self.conn_type = req.conn_type.clone();
                 info!(
-                    "Identify {:?} app={} stream={:?} param={:?}",
+                    "Identify {:?} app:{} stream:{} param:{}",
                     req.conn_type,
                     req.tc_url.path(),
-                    req.stream,
-                    req.tc_url.query()
+                    req.stream(),
+                    req.tc_url.query().unwrap_or(""),
                 );
                 return Ok(req);
             }

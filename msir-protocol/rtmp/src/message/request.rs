@@ -31,12 +31,25 @@ impl Request {
 
     pub fn app_stream(&self) -> String {
         return format!(
-            "{}/{}",
-            self.tc_url.path(),
+            "/{}/{}",
+            match self.tc_url.path_segments() {
+                Some(split) => {
+                    let apps: Vec<&str> = split.collect();
+                    apps[0]
+                }
+                None => "",
+            },
             match &self.stream {
                 Some(s) => s,
                 None => "",
             }
         );
+    }
+
+    pub fn stream(&self) -> &str {
+        match &self.stream {
+            Some(s) => s,
+            None => "",
+        }
     }
 }

@@ -344,8 +344,7 @@ impl RtmpMessage {
                     Amf0Value::Utf8String("WIN 15,0,0,239".to_string()),
                 ),
                 ("swfUrl", Amf0Value::Utf8String("".to_string())),
-                // TODO: add query to tc_url
-                ("tc_url", Amf0Value::Utf8String(req.tc_url.to_string())),
+                ("tcUrl", Amf0Value::Utf8String(req.tc_url.to_string())),
                 ("fpad", Amf0Value::Boolean(false)),
                 ("capabilities", Amf0Value::Number(239.0)),
                 ("audioCodecs", Amf0Value::Number(3575.0)),

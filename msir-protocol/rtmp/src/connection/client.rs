@@ -1,6 +1,8 @@
+use std::time::Duration;
 use msir_core::transport::Transport;
 use rml_amf0::Amf0Value;
 use tokio::net::TcpStream;
+use tracing::info;
 
 use crate::{
     handshake,
@@ -37,6 +39,34 @@ impl Client {
             req,
             ctx: Context::new(io),
         })
+    }
+
+    pub fn set_recv_timeout(&mut self, tm: Duration) {
+        self.ctx.set_recv_timeout(tm);
+    }
+
+    pub fn set_send_timeout(&mut self, tm: Duration) {
+        self.ctx.set_send_timeout(tm);
+    }
+
+    pub fn get_recv_bytes(&mut self) -> u64 {
+        self.ctx.get_recv_bytes()
+    }
+
+    pub fn get_send_bytes(&mut self) -> u64 {
+        self.ctx.get_send_bytes()
+    }
+
+    pub fn get_audio_count(&mut self) -> u64 {
+        self.ctx.get_in_audio_count()
+    }
+
+    pub fn get_video_count(&mut self) -> u64 {
+        self.ctx.get_in_video_count()
+    }
+
+    pub async fn recv_message(&mut self) -> Result<RtmpMessage, ConnectionError> {
+        self.ctx.recv_message().await
     }
 
     pub async fn send_message(
@@ -95,7 +125,11 @@ impl Client {
         Ok(DEFAULT_SID)
     }
 
-    pub async fn play(&mut self, stream: String, stream_id: u32) -> Result<(), ConnectionError> {
+    pub async fn play(&mut self, stream_id: u32) -> Result<(), ConnectionError> {
+        let stream = match &self.req.stream {
+            Some(s) => s.clone(),
+            None => "".to_string(),
+        };
         // Play stream
         self.send_message(RtmpMessage::new_play_stream(stream), 0, stream_id)
             .await?;
@@ -116,6 +150,11 @@ impl Client {
         self.send_message(RtmpMessage::SetChunkSize { chunk_size: 60000 }, 0, 0)
             .await?;
 
+        info!(
+            "Pull tc_url: {}, stream: {} succeed",
+            self.req.tc_url,
+            self.req.stream()
+        );
         Ok(())
     }
 }
