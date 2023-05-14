@@ -61,14 +61,20 @@ pub enum StreamEvent {
 pub struct Manager {
     pool: HashMap<String, MgrToHubChanTx>,
     conn_rx: ConnToMgrChanRx,
+    conn_tx: ConnToMgrChanTx,
     stat_tx: ConnToStatChanTx,
 }
 
 impl Manager {
-    pub fn new(rx: ConnToMgrChanRx, tx: ConnToStatChanTx) -> Self {
+    pub fn new(
+        conn_rx: ConnToMgrChanRx,
+        conn_tx: ConnToMgrChanTx,
+        stat_tx: ConnToStatChanTx,
+    ) -> Self {
         Self {
-            conn_rx: rx,
-            stat_tx: tx,
+            conn_rx,
+            conn_tx,
+            stat_tx,
             pool: HashMap::new(),
         }
     }
@@ -117,8 +123,12 @@ impl Manager {
                     self.pool.insert(ev.stream_key.clone(), hub_tx.clone());
                     // New rtmp client
                     let uid = utils::gen_uid();
-                    let mut rtmp =
-                        RtmpPull::new(uid.clone(), Hub::new(hub_rx), self.stat_tx.clone());
+                    let mut rtmp = RtmpPull::new(
+                        uid.clone(),
+                        Hub::new(hub_rx),
+                        self.conn_tx.clone(),
+                        self.stat_tx.clone(),
+                    );
                     rtmp.on_create_conn(ev.stream_key.clone());
                     let vecs: Vec<&str> = ev.stream_key.split('/').collect();
                     let tc_url = format!("{}/{}", STATIC_PULL_ADDRESS, vecs[1]);
@@ -129,7 +139,8 @@ impl Manager {
                             if let Err(e) = start_pull_task(&mut rtmp, tc_url, stream).await {
                                 error!("Failed to transfer; error={}", e);
                             }
-                            rtmp.on_delete_conn(stream_key);
+                            rtmp.on_delete_conn(stream_key.clone());
+                            rtmp.unregister(stream_key);
                         }
                         .instrument(tracing::info_span!("RTMP-PULL", uid)),
                     );

@@ -2,24 +2,30 @@ use rtmp::{
     connection::{client::Client as RtmpClient, RtmpConnType, RtmpCtrlAction},
     message::RtmpMessage,
 };
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::{
     error::ServiceError,
     statistic::{ConnStat, ConnToStatChanTx, StatEvent},
-    stream::{hub::Hub, ConnToMgrChanTx},
+    stream::{hub::Hub, ConnToMgrChanTx, RoleType, StreamEvent, UnregisterEv},
     CONN_PRINT_INTVAL,
 };
 
 pub struct RtmpPull {
     uid: String,
     hub: Hub,
+    mgr_tx: ConnToMgrChanTx,
     stat_tx: ConnToStatChanTx,
 }
 
 impl RtmpPull {
-    pub fn new(uid: String, hub: Hub, stat_tx: ConnToStatChanTx) -> Self {
-        Self { uid, hub, stat_tx }
+    pub fn new(uid: String, hub: Hub, mgr_tx: ConnToMgrChanTx, stat_tx: ConnToStatChanTx) -> Self {
+        Self {
+            uid,
+            hub,
+            mgr_tx,
+            stat_tx,
+        }
     }
 
     pub fn on_create_conn(&self, stream_key: String) {
@@ -36,7 +42,18 @@ impl RtmpPull {
         ));
     }
 
-    pub async fn run(&mut self, tc_url: String, stream: String) -> Result<(), ServiceError> {
+    pub fn unregister(&mut self, stream_key: String) {
+        let msg = StreamEvent::Unregister(UnregisterEv {
+            uid: self.uid.clone(),
+            stream_key,
+            role: RoleType::Publisher,
+        });
+        if let Err(e) = self.mgr_tx.send(msg) {
+            warn!("send unregister event failed: {}", e);
+        }
+    }
+
+    pub async fn pulling(&mut self, tc_url: String, stream: String) -> Result<(), ServiceError> {
         let mut rtmp = RtmpClient::new(tc_url, stream).await?;
         let sid = rtmp.connect(self.uid.clone()).await? as u32;
         rtmp.play(sid).await?;
@@ -62,8 +79,13 @@ impl RtmpPull {
                     }
                 }
                 ret = self.hub.process_hub_ev() => {
-                    if let Err(e) = ret {
-                        return Err(ServiceError::HubError(e));
+                    match ret {
+                        Ok(subscribers_num) => {
+                            if subscribers_num == 0 {
+                                return Err(ServiceError::NoSubscriber);
+                            }
+                        }
+                        Err(e) => return Err(ServiceError::HubError(e))
                     }
                 }
                 _ = stat_report.tick() => {
@@ -86,5 +108,5 @@ pub async fn start_pull_task(
     tc_url: String,
     stream: String,
 ) -> Result<(), ServiceError> {
-    rtmp.run(tc_url, stream).await
+    rtmp.pulling(tc_url, stream).await
 }

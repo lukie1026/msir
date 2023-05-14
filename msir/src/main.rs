@@ -50,7 +50,7 @@ fn statistic_bg_start() -> UnboundedSender<StatEvent> {
 
 fn stream_mgr_start(stat_tx: ConnToStatChanTx) -> UnboundedSender<StreamEvent> {
     let (tx, rx) = mpsc::unbounded_channel::<StreamEvent>();
-    let stream_mgr = Manager::new(rx, stat_tx);
+    let stream_mgr = Manager::new(rx, tx.clone(), stat_tx);
     tokio::spawn(
         stream_mgr
             .run()

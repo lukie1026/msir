@@ -18,4 +18,7 @@ pub enum ServiceError {
 
     #[error("Publish is done")]
     PublishDone,
+
+    #[error("No subscriber")]
+    NoSubscriber,
 }

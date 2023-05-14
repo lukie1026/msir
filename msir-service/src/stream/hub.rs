@@ -39,7 +39,7 @@ impl Hub {
         }
     }
 
-    pub async fn process_hub_ev(&mut self) -> Result<(), StreamError> {
+    pub async fn process_hub_ev(&mut self) -> Result<usize, StreamError> {
         match self.event_rx.recv().await {
             Some(ev) => {
                 match ev {
@@ -68,7 +68,7 @@ impl Hub {
                             msgs.push(msg.clone());
                         }
                         if let Err(_) = tx.send(msgs) {
-                            warn!("Hub send frame to comsumer failed");
+                            warn!("Hub send frame to subscriber failed");
                         }
                         sent_frame += self.gop.caches.len();
                         debug!(
@@ -83,7 +83,7 @@ impl Hub {
                     }
                     HubEvent::SubscriberLeave(uid) => self.subscribers.remove(&uid),
                 };
-                Ok(())
+                Ok(self.subscribers.len())
             }
             None => Err(StreamError::HubClosed),
         }
@@ -91,9 +91,9 @@ impl Hub {
 
     pub fn on_metadata(&mut self, msg: RtmpMessage) -> Result<(), StreamError> {
         debug!("Recv metadata {}", msg);
-        for (_, comsumer) in self.subscribers.iter() {
-            if let Err(e) = comsumer.send(vec![msg.clone()]) {
-                warn!("Hub send metadata to comsumer failed: {:?}", e);
+        for (_, subscriber) in self.subscribers.iter() {
+            if let Err(_) = subscriber.send(vec![msg.clone()]) {
+                warn!("Hub send metadata to subscriber failed");
             }
         }
         self.meta.metadata = Some(msg);
@@ -110,8 +110,10 @@ impl Hub {
             || cur_ts < self.start_ts
             || has_key_frame
         {
-            for (_, comsumer) in self.subscribers.iter() {
-                let _ = comsumer.send(self.merge_msgs.clone());
+            for (_, subscriber) in self.subscribers.iter() {
+                if let Err(_) = subscriber.send(self.merge_msgs.clone()) {
+                    warn!("Hub send frames to subscriber failed");
+                }
             }
             self.merge_msgs.clear();
             self.start_ts = cur_ts;

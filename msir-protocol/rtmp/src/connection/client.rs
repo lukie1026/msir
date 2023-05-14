@@ -145,7 +145,7 @@ impl Client {
             .await?;
 
         info!(
-            "Pull tc_url: {}, stream: {} succeed",
+            "Pull tc_url:{}, stream:{} succeed",
             self.req.tc_url,
             self.req.stream()
         );
