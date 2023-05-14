@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc;
-use tracing::info;
+use tracing::{error, info};
 
 const STREAM_PRINT_INTVAL: Duration = Duration::from_secs(10);
 
@@ -47,7 +47,11 @@ impl Statistic {
         let stream_key = stat.stream_key.clone();
         let conn_type = stat.conn_type.clone();
         self.conns.insert(uid, stat);
-        // TODO: RemoteIngester need to first call than player
+        // PullClient need to first call than player
+        if conn_type.is_play() && !self.streams.contains_key(&stream_key) {
+            error!("No publish stats record before player stats arrived");
+            return;
+        }
         let stream = self
             .streams
             .entry(stream_key.clone())

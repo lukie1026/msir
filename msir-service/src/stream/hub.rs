@@ -1,9 +1,9 @@
+use crate::PERF_MERGE_SEND_CHAN;
+
 use super::{error::StreamError, gop::GopCache, HubToSubsChanTx, MgrToHubChanRx};
 use rtmp::{codec, message::RtmpMessage};
 use std::collections::HashMap;
 use tracing::{debug, info, trace, warn};
-
-const PERF_MERGE_SEND_CHAN: u32 = 170;
 
 pub enum HubEvent {
     SubscriberJoin(String, HubToSubsChanTx),

@@ -2,15 +2,10 @@ use anyhow::Result;
 use futures::FutureExt;
 use msir_core::transport::Transport;
 use msir_service::{
-    rtmp_service::RtmpService,
-    statistic::ConnToStatChanTx,
-    stream::ConnToMgrChanTx,
-    utils,
+    rtmp_service::RtmpService, statistic::ConnToStatChanTx, stream::ConnToMgrChanTx, utils,
 };
 use std::env;
-use tokio::{
-    net::{TcpListener, TcpStream},
-};
+use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, Instrument};
 
 pub async fn rtmp_server_start(

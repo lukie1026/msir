@@ -1,3 +1,9 @@
+use crate::{
+    rtmp_pull::{start_pull_task, RtmpPull},
+    statistic::ConnToStatChanTx,
+    utils, STATIC_PULL_ADDRESS,
+};
+
 use self::{
     error::StreamError,
     hub::{Hub, HubEvent},
@@ -5,7 +11,7 @@ use self::{
 use rtmp::message::RtmpMessage;
 use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn, Instrument};
 
 pub mod error;
 pub mod gop;
@@ -55,12 +61,14 @@ pub enum StreamEvent {
 pub struct Manager {
     pool: HashMap<String, MgrToHubChanTx>,
     conn_rx: ConnToMgrChanRx,
+    stat_tx: ConnToStatChanTx,
 }
 
 impl Manager {
-    pub fn new(rx: ConnToMgrChanRx) -> Self {
+    pub fn new(rx: ConnToMgrChanRx, tx: ConnToStatChanTx) -> Self {
         Self {
             conn_rx: rx,
+            stat_tx: tx,
             pool: HashMap::new(),
         }
     }
@@ -104,7 +112,34 @@ impl Manager {
                         Token::SubscriberToken(rx)
                     }
                 } else {
-                    Token::Failure(StreamError::NoPublish)
+                    // Token::Failure(StreamError::NoPublish)
+                    let (hub_tx, hub_rx) = mpsc::unbounded_channel();
+                    self.pool.insert(ev.stream_key.clone(), hub_tx.clone());
+                    // New rtmp client
+                    let uid = utils::gen_uid();
+                    let mut rtmp =
+                        RtmpPull::new(uid.clone(), Hub::new(hub_rx), self.stat_tx.clone());
+                    rtmp.on_create_conn(ev.stream_key.clone());
+                    let vecs: Vec<&str> = ev.stream_key.split('/').collect();
+                    let tc_url = format!("{}/{}", STATIC_PULL_ADDRESS, vecs[1]);
+                    let stream = vecs[2].to_string();
+                    let stream_key = ev.stream_key;
+                    tokio::spawn(
+                        async move {
+                            if let Err(e) = start_pull_task(&mut rtmp, tc_url, stream).await {
+                                error!("Failed to transfer; error={}", e);
+                            }
+                            rtmp.on_delete_conn(stream_key);
+                        }
+                        .instrument(tracing::info_span!("RTMP-PULL", uid)),
+                    );
+
+                    let (sub_tx, sub_rx) = mpsc::unbounded_channel();
+                    if let Err(_) = hub_tx.send(HubEvent::SubscriberJoin(ev.uid, sub_tx)) {
+                        Token::Failure(StreamError::DisconnectHub)
+                    } else {
+                        Token::SubscriberToken(sub_rx)
+                    }
                 }
             }
         };

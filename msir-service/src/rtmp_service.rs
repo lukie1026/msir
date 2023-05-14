@@ -4,22 +4,19 @@ use crate::{
     error::ServiceError,
     statistic::{ConnStat, ConnToStatChanTx, StatEvent},
     stream::{ConnToMgrChanTx, RegisterEv, RoleType, StreamEvent, Token, UnregisterEv},
-    utils,
+    utils, CONN_PRINT_INTVAL, PERF_MERGE_SEND_MSG,
 };
 use msir_core::transport::Transport;
 use rtmp::connection::RtmpConnType;
-use rtmp::connection::{server as rtmp_conn, RtmpCtrlAction};
+use rtmp::connection::{server::Server as RtmpServer, RtmpCtrlAction};
 use rtmp::message::request::Request;
 use rtmp::message::RtmpMessage;
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, trace, warn};
 
-const CONN_PRINT_INTVAL: Duration = Duration::from_secs(5);
-const PERF_MERGE_SEND_MSG: u32 = 350;
-
 pub struct RtmpService {
     uid: String,
-    rtmp: rtmp_conn::Server,
+    rtmp: RtmpServer,
     mgr_tx: ConnToMgrChanTx,
     stat_tx: ConnToStatChanTx,
 }
@@ -31,7 +28,7 @@ impl RtmpService {
         mgr_tx: ConnToMgrChanTx,
         stat_tx: ConnToStatChanTx,
     ) -> Result<Self, ServiceError> {
-        let rtmp = rtmp_conn::Server::new(io).await?;
+        let rtmp = RtmpServer::new(io).await?;
         let uid = uid.unwrap_or_else(|| utils::gen_uid());
         Ok(Self {
             uid,

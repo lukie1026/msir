@@ -1,5 +1,5 @@
 use crate::rtmp_server::rtmp_server_start;
-use msir_service::statistic::{StatEvent, Statistic};
+use msir_service::statistic::{ConnToStatChanTx, StatEvent, Statistic};
 use msir_service::stream::{Manager, StreamEvent};
 use std::error::Error;
 use std::io;
@@ -11,8 +11,8 @@ use tracing_subscriber;
 
 mod rtmp_server;
 
-// #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main(flavor = "multi_thread")]
+// #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
     let file_appender = tracing_appender::rolling::never("/tmp", "tracing.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("MSIR start...");
 
     let stat_tx = statistic_bg_start();
-    let stream_tx = stream_mgr_start();
+    let stream_tx = stream_mgr_start(stat_tx.clone());
 
     tokio::spawn(proc_stat().instrument(tracing::info_span!("PROC-BG")));
     tokio::spawn(async move {
@@ -48,9 +48,9 @@ fn statistic_bg_start() -> UnboundedSender<StatEvent> {
     tx
 }
 
-fn stream_mgr_start() -> UnboundedSender<StreamEvent> {
+fn stream_mgr_start(stat_tx: ConnToStatChanTx) -> UnboundedSender<StreamEvent> {
     let (tx, rx) = mpsc::unbounded_channel::<StreamEvent>();
-    let stream_mgr = Manager::new(rx);
+    let stream_mgr = Manager::new(rx, stat_tx);
     tokio::spawn(
         stream_mgr
             .run()

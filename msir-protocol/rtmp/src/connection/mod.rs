@@ -7,6 +7,7 @@ pub mod server;
 pub enum RtmpConnType {
     Play,
     FlvPlay,
+    Pull,
     FmlePublish,
     FlashPublish,
     HaivisionPublish,
@@ -16,7 +17,8 @@ pub enum RtmpConnType {
 impl RtmpConnType {
     pub fn is_publish(&self) -> bool {
         match self {
-            RtmpConnType::FmlePublish
+            RtmpConnType::Pull
+            | RtmpConnType::FmlePublish
             | RtmpConnType::FlashPublish
             | RtmpConnType::HaivisionPublish => true,
             _ => false,

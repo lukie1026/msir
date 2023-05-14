@@ -16,13 +16,12 @@ use crate::{
 use super::{context::Context, error::ConnectionError};
 
 pub struct Client {
-    uid: String,
     ctx: Context,
-    req: Request,
+    pub req: Request,
 }
 
 impl Client {
-    pub async fn new(uid: String, tc_url: String, stream: String) -> Result<Self, ConnectionError> {
+    pub async fn new(tc_url: String, stream: String) -> Result<Self, ConnectionError> {
         let mut req = Request::parse_from(tc_url)?;
         req.stream = Some(stream);
 
@@ -35,7 +34,6 @@ impl Client {
         hc.handshake(&mut io).await?;
 
         Ok(Self {
-            uid,
             req,
             ctx: Context::new(io),
         })
@@ -78,14 +76,10 @@ impl Client {
         self.ctx.send_message(msg, timestamp, csid).await
     }
 
-    pub async fn connect(&mut self) -> Result<f64, ConnectionError> {
+    pub async fn connect(&mut self, uid: String) -> Result<f64, ConnectionError> {
         // Connect app
-        self.send_message(
-            RtmpMessage::new_connect_app(&self.req, self.uid.clone()),
-            0,
-            0,
-        )
-        .await?;
+        self.send_message(RtmpMessage::new_connect_app(&self.req, uid), 0, 0)
+            .await?;
 
         // Set Window Acknowledgement size(2500000)
         self.send_message(
