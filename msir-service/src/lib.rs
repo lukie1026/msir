@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 pub mod error;
+pub mod httpflv_service;
 pub mod rtmp_pull;
 pub mod rtmp_service;
 pub mod statistic;

@@ -2,6 +2,7 @@
 ## Global
 - [x] optimize log and display trait of RtmpMessage
 - [ ] redefine error
+- [ ] merge rtmp and flv register/unregister
 
 ## Protocol/rtmp-handshake
 - [ ] complex handshake
@@ -20,7 +21,7 @@
 - [ ] Bug fix: rtmpdump -r "rtmp://127.0.0.1:8081/live/stream?aaa=bbb", parsed stream is "stream?aaa=bbb"
 
 ## Protocol/rtmp-client
-- [ ] 
+- [x] 
 
 ## Service/rtmp-service
 - [x] replace uuid

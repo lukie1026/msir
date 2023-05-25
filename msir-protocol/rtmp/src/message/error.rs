@@ -46,6 +46,9 @@ pub enum ReuquestError {
     #[error("Invalid tcUrl {0}")]
     InvalidTcurl(#[from] ParseError),
 
-    #[error("Not found app in tcUrl: {0}")]
-    NotfoundApp(String),
+    #[error("Invalid http url {0}")]
+    InvalidHttpUrl(String),
+
+    #[error("Not found app in tcUrl")]
+    NotfoundApp,
 }

@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use crate::{
     error::ServiceError,
     statistic::{ConnStat, ConnToStatChanTx, StatEvent},
@@ -75,6 +73,7 @@ impl RtmpService {
         }
     }
 
+    // TODO: register, unregister, stats can be reused by rtmp and httpflv
     async fn register(&self, req: &Request) -> Result<Token, ServiceError> {
         let stream_key = req.app_stream();
         let role = match req.conn_type.is_publish() {

@@ -1,9 +1,20 @@
 use crate::stream::error::StreamError;
-use rtmp::connection::error::ConnectionError;
+use futures::channel::mpsc::SendError;
+use httpflv::error::FlvMuxerError;
+use rtmp::{connection::error::ConnectionError, message::error::ReuquestError};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ServiceError {
+    #[error("Flv muxer error: {0}")]
+    FlvError(#[from] FlvMuxerError),
+
+    #[error("Channel send error: {0}")]
+    ChanSendError(#[from] SendError),
+
+    #[error("Request parse error: {0}")]
+    RequestError(#[from] ReuquestError),
+
     #[error("Connection error: {0}")]
     ConnectionError(#[from] ConnectionError),
 

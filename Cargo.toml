@@ -5,4 +5,5 @@ members = [
     "msir-core",
     "msir-service",
     "msir-protocol/rtmp",
+    "msir-protocol/httpflv",
 ]

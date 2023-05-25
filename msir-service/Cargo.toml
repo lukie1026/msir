@@ -8,8 +8,11 @@ edition = "2021"
 [dependencies]
 msir-core = { path = "../msir-core" }
 rtmp = { path = "../msir-protocol/rtmp" }
+httpflv = { path = "../msir-protocol/httpflv" }
 thiserror = "1.0.40"
 tracing = "0.1.38"
 tokio = { version = "1.28.0", features = ["full"]}
 uuid = { version = "1.3.2", features = ["v4"] }
 rand = "0.8.5"
+futures = { version = "0.3"}
+hyper = { version = "0.14", features = ["full"] }
