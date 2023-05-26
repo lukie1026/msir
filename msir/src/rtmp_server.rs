@@ -4,21 +4,21 @@ use msir_core::transport::Transport;
 use msir_service::{
     rtmp_service::RtmpService, statistic::ConnToStatChanTx, stream::ConnToMgrChanTx, utils,
 };
-use std::env;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, Instrument};
+
+use crate::config::RtmpConfig;
 
 pub async fn rtmp_server_start(
     stream_tx: ConnToMgrChanTx,
     stat_tx: ConnToStatChanTx,
+    config: &RtmpConfig,
 ) -> Result<()> {
-    let listen_addr = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "0.0.0.0:8081".to_string());
-
-    info!("Listening on: {}", listen_addr);
+    let listen_addr = &config.listen;
 
     let listener = TcpListener::bind(listen_addr).await?;
+
+    info!("Listening on: {}", listen_addr);
 
     while let Ok((inbound, _)) = listener.accept().await {
         let uid = utils::gen_uid();

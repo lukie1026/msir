@@ -18,6 +18,10 @@ msir-core = { path = "../msir-core" }
 rtmp = { path = "../msir-protocol/rtmp/" }
 msir-service = { path = "../msir-service"}
 hyper = { version = "0.14", features = ["full"] }
+toml = "0.7.4"
+serde_derive = "1.0.163"
+serde = "1.0.163"
+clap = "4.3.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = "0.15.1"

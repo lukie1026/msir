@@ -1,0 +1,31 @@
+[worker]
+# mode = "single"
+mode = "auto"
+
+[log]
+level = "info"
+file = "/tmp/tracing.log"
+rolling = "nerver" # hour or daily or never
+
+[rtmp]
+listen = "0.0.0.0:8081"
+# performance = "middle" # or "high" or "low"
+
+[http]
+enabled = true
+listen = "0.0.0.0:8091"
+[http.flv]
+enabled = true
+# [http.hls]
+# enabled = false
+
+# [hook]
+# enabled = false
+# on_publish = "http://127.0.0.1:7788/hook/on_publish"
+# on_unpublish = "http://127.0.0.1:7788/hook/on_unpublish"
+# on_play = "http://127.0.0.1:7788/hook/on_play"
+# on_stop = "http://127.0.0.1:7788/hook/on_stop"
+
+[api]
+enabled = true
+listen = "0.0.0.0:8001"

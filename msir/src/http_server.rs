@@ -10,15 +10,21 @@ use std::{convert::Infallible, io};
 
 use tracing::{error, info, Instrument};
 
+use crate::config::HttpConfig;
+
 // type FlvRespChanRx = UnboundedReceiver<io::Result<Vec<u8>>>;
 
 pub async fn http_server_start(
     stream_tx: ConnToMgrChanTx,
     stat_tx: ConnToStatChanTx,
+    config: &HttpConfig,
 ) -> Result<()> {
-    let addr = ([127, 0, 0, 1], 8091).into();
-
-    info!("Listening on: {}", addr);
+    if !config.enabled {
+        return Ok(());
+    }
+    let addr = config.listen.clone().unwrap().parse()?;
+    let flv = config.flv.clone().map(|f| f.enabled).unwrap_or(false);
+    let hls = config.hls.clone().map(|h| h.enabled).unwrap_or(false);
 
     let make_service = make_service_fn(move |_socket| {
         let stream_tx_c = stream_tx.clone();
@@ -30,12 +36,16 @@ pub async fn http_server_start(
                     utils::gen_uid(),
                     stream_tx_c.clone(),
                     stat_tx_c.clone(),
+                    flv,
+                    hls,
                 )
             }))
         }
     });
 
     Server::bind(&addr).serve(make_service).await?;
+
+    info!("Listening on: {}", addr);
 
     Ok(())
 }
@@ -45,10 +55,14 @@ async fn http_service(
     uid: String,
     stream: ConnToMgrChanTx,
     stat: ConnToStatChanTx,
+    flv_en: bool,
+    hls_en: bool,
 ) -> Result<Response<Body>> {
-    if req.uri().path().ends_with(".flv") {
-        if let Ok(resp) = httpflv_service(req, uid, stream, stat).await {
-            return Ok(resp);
+    if flv_en {
+        if req.uri().path().ends_with(".flv") {
+            if let Ok(resp) = httpflv_service(req, uid, stream, stat).await {
+                return Ok(resp);
+            }
         }
     }
 
