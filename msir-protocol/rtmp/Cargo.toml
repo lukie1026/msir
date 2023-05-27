@@ -16,3 +16,5 @@ tracing = "0.1.38"
 tokio = { version = "1.28.0", features = ["full"]}
 rml_amf0 = "0.3.0"
 url = "2.3.1"
+serde_derive = "1.0.163"
+serde = "1.0.163"

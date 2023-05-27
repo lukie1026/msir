@@ -149,8 +149,8 @@ pub struct HttpHls {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ApiConfig {
-    enabled: bool,
-    listen: Option<String>,
+    pub enabled: bool,
+    pub listen: Option<String>,
 }
 
 impl ApiConfig {

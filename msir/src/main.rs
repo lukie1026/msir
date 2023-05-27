@@ -1,3 +1,4 @@
+use crate::api_server::api_server_start;
 use crate::http_server::http_server_start;
 use crate::rtmp_server::rtmp_server_start;
 use clap::{value_parser, Arg, Command};
@@ -6,7 +7,6 @@ use msir_service::statistic::{ConnToStatChanTx, StatEvent, Statistic};
 use msir_service::stream::{Manager, StreamEvent};
 use std::error::Error;
 use std::path::Path;
-use std::time::Duration;
 use std::{io, process};
 use tokio::runtime;
 use tokio::signal;
@@ -16,6 +16,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber;
 // use tokio_metrics::RuntimeMonitor;
 
+mod api_server;
 mod config;
 mod http_server;
 mod rtmp_server;
@@ -80,14 +81,22 @@ fn main() -> Result<(), Box<dyn Error>> {
                 process::exit(-1);
             }
         });
+
+        let stat_tx_c = stat_tx.clone();
+        let stream_tx_c = stream_tx.clone();
         tokio::spawn(async move {
-            if let Err(err) = http_server_start(stream_tx, stat_tx, &cfg.http.unwrap()).await {
+            if let Err(err) = http_server_start(stream_tx_c, stat_tx_c, &cfg.http.unwrap()).await {
                 error!("Start http server error: {}\n", err);
                 process::exit(-1);
             }
         });
 
-        tokio::spawn(proc_stat().instrument(tracing::info_span!("PROC-BG")));
+        tokio::spawn(async move {
+            if let Err(err) = api_server_start(stream_tx, stat_tx, &cfg.api.unwrap()).await {
+                error!("Start api server error: {}\n", err);
+                process::exit(-1);
+            }
+        });
 
         signal::ctrl_c().await.unwrap();
     });
@@ -160,27 +169,3 @@ fn stream_mgr_start(stat_tx: ConnToStatChanTx) -> UnboundedSender<StreamEvent> {
     );
     tx
 }
-
-#[cfg(target_os = "linux")]
-async fn proc_stat() {
-    use procfs::process::Stat;
-    let intval = 5;
-    let mut interval = tokio::time::interval(Duration::from_secs(intval));
-    let mut last_stat: Option<Stat> = None;
-    loop {
-        interval.tick().await;
-        let curr = procfs::process::Process::myself().unwrap().stat().unwrap();
-        let memory = curr.rss * procfs::page_size();
-        if let Some(last) = last_stat {
-            let cpu = (100 * (curr.utime + curr.stime - last.utime - last.stime)) as f32
-                / intval as f32
-                / procfs::ticks_per_second() as f32;
-            info!("CPU {}% MEM {}MB", cpu, memory / 1024 / 1024);
-        }
-
-        last_stat = Some(curr);
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-async fn proc_stat() {}

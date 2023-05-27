@@ -1,10 +1,11 @@
 use msir_core::utils;
 use rtmp::connection::RtmpConnType;
+use serde_derive::Serialize;
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info};
 
 const STREAM_PRINT_INTVAL: Duration = Duration::from_secs(10);
@@ -12,16 +13,25 @@ const STREAM_PRINT_INTVAL: Duration = Duration::from_secs(10);
 pub type ConnToStatChanTx = mpsc::UnboundedSender<StatEvent>;
 pub type ConnToStatChanRx = mpsc::UnboundedReceiver<StatEvent>;
 
+pub type QueryConnsResponse = oneshot::Sender<HashMap<String, ConnStat>>;
+pub type QueryStreamsResponse = oneshot::Sender<HashMap<String, StreamStat>>;
+pub type QuerySummariesResponse = oneshot::Sender<SummariesStat>;
+
 pub enum StatEvent {
     CreateConn(String, ConnStat),
     DeleteConn(String, ConnStat),
     UpdateConn(String, ConnStat),
+
+    QueryConn(String, QueryConnsResponse),
+    QueryStream(String, QueryStreamsResponse),
+    QuerySummaries(QuerySummariesResponse),
 }
 
 pub struct Statistic {
     rx: ConnToStatChanRx,
     conns: HashMap<String, ConnStat>,
     streams: HashMap<String, StreamStat>,
+    summaries: SummariesStat,
 }
 
 impl Statistic {
@@ -30,15 +40,34 @@ impl Statistic {
             rx,
             conns: HashMap::new(),
             streams: HashMap::new(),
+            summaries: SummariesStat::new(String::from(msir_core::VERSION)),
         }
     }
 
     pub async fn run(mut self) {
-        while let Some(ev) = self.rx.recv().await {
-            match ev {
-                StatEvent::CreateConn(uid, cs) => self.on_create_conn(uid, cs),
-                StatEvent::DeleteConn(uid, cs) => self.on_delete_conn(uid, cs),
-                StatEvent::UpdateConn(uid, cs) => self.on_update_conn(uid, cs),
+        let intval = 5;
+        let mut tick = tokio::time::interval(Duration::from_secs(intval));
+        loop {
+            tokio::select! {
+                event = self.rx.recv() => {
+                    if let Some(ev) = event {
+                        match ev {
+                            StatEvent::CreateConn(uid, cs) => self.on_create_conn(uid, cs),
+                            StatEvent::DeleteConn(uid, cs) => self.on_delete_conn(uid, cs),
+                            StatEvent::UpdateConn(uid, cs) => self.on_update_conn(uid, cs),
+
+                            StatEvent::QueryConn(filter, tx) => self.on_query_conns(filter, tx),
+                            StatEvent::QueryStream(filter, tx) => self.on_query_streams(filter, tx),
+                            StatEvent::QuerySummaries(tx) => self.on_query_summaries(tx),
+                        }
+                    }
+                }
+                _ = tick.tick() => {
+                    self.summaries.update(intval);
+                    self.summaries.conns = self.conns.len();
+                    self.summaries.streams = self.streams.len();
+                    info!("CPU {}% MEM {}MB, streams:{} conns:{}", self.summaries.cpu_percent, self.summaries.mem_mbytes, self.summaries.streams, self.summaries.conns);
+                }
             }
         }
     }
@@ -100,20 +129,60 @@ impl Statistic {
             }
         }
     }
+
+    fn on_query_streams(&mut self, filter: String, tx: QueryStreamsResponse) {
+        if filter.is_empty() {
+            let _ = tx.send(self.streams.clone());
+        } else {
+            let mut res = HashMap::new();
+            for (k, v) in &self.streams {
+                if k.contains(&filter) {
+                    res.insert(k.clone(), v.clone());
+                }
+            }
+            let _ = tx.send(res);
+        }
+    }
+
+    fn on_query_conns(&mut self, filter: String, tx: QueryConnsResponse) {
+        if filter.is_empty() {
+            let _ = tx.send(self.conns.clone());
+        } else {
+            let mut res = HashMap::new();
+            for (k, v) in &self.conns {
+                if k.contains(&filter) {
+                    res.insert(k.clone(), v.clone());
+                }
+            }
+            let _ = tx.send(res);
+        }
+    }
+
+    fn on_query_summaries(&mut self, tx: QuerySummariesResponse) {
+        self.summaries.streams = self.streams.len();
+        self.summaries.conns = self.conns.len();
+
+        let _ = tx.send(self.summaries.clone());
+    }
 }
 
-struct StreamStat {
-    audio: u64,
-    video: u64,
-    recv_bytes: u64,
-    send_bytes: u64,
-    publish_type: RtmpConnType,
-    start_time: u32,
-    clients: u32,
+#[derive(Debug, Clone, Serialize)]
+pub struct StreamStat {
+    pub audio: u64,
+    pub video: u64,
+    pub recv_bytes: u64,
+    pub send_bytes: u64,
+    pub publish_type: RtmpConnType,
+    pub start_time: u32,
+    pub clients: u32,
     // Last record for log print
+    #[serde(skip_serializing)]
     last_logged: Option<Instant>,
+    #[serde(skip_serializing)]
     last_video: u64,
+    #[serde(skip_serializing)]
     last_recv_bytes: u64,
+    #[serde(skip_serializing)]
     last_send_bytes: u64,
 }
 
@@ -162,7 +231,7 @@ impl StreamStat {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ConnStat {
     pub conn_time: u32,
     pub stream_key: String,
@@ -187,6 +256,74 @@ impl ConnStat {
     }
 }
 
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Serialize)]
+pub struct SummariesStat {
+    pub version: String,
+    pub uptime_sec: u32,
+    pub pid: i32,
+    pub ppid: i32,
+    pub threads: i64,
+    pub mem_mbytes: u64,
+    pub cpu_percent: f32,
+    pub streams: usize,
+    pub conns: usize,
+
+    #[serde(skip_serializing)]
+    last_stat: procfs::process::Stat,
+}
+
+#[cfg(target_os = "linux")]
+impl SummariesStat {
+    fn new(ver: String) -> Self {
+        let stat = procfs::process::Process::myself().unwrap().stat().unwrap();
+        Self {
+            version: ver,
+            uptime_sec: utils::current_time() - stat.starttime().unwrap().timestamp() as u32,
+            pid: stat.pid,
+            ppid: stat.ppid,
+            threads: stat.num_threads,
+            mem_mbytes: stat.rss * procfs::page_size() / 1024 / 1024,
+            cpu_percent: 0.0,
+            last_stat: stat,
+            streams: 0,
+            conns: 0,
+        }
+    }
+
+    fn update(&mut self, intval: u64) {
+        let stat = procfs::process::Process::myself().unwrap().stat().unwrap();
+        self.uptime_sec = utils::current_time() - stat.starttime().unwrap().timestamp() as u32;
+        self.mem_mbytes = stat.rss * procfs::page_size() / 1024 / 1024;
+        self.cpu_percent =
+            (100 * (stat.utime + stat.stime - self.last_stat.utime - self.last_stat.stime)) as f32
+                / intval as f32
+                / procfs::ticks_per_second() as f32;
+        self.last_stat = stat;
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[derive(Debug, Clone, Serialize)]
+pub struct SummariesStat {
+    pub version: String,
+    pub streams: usize,
+    pub conns: usize,
+}
+
+#[cfg(not(target_os = "linux"))]
+impl SummariesStat {
+    fn new(ver: String) -> Self {
+        Self {
+            version: ver,
+            streams: 0,
+            conns: 0,
+        }
+    }
+
+    fn update(&mut self, intval: u64) {}
+}
+
 const KBIT: u64 = 1024;
 const MBIT: u64 = 1024 * 1024;
 const GBIT: u64 = 1024 * 1024 * 1024;
@@ -201,5 +338,5 @@ fn format_bw(bytes: u64) -> String {
     if b >= KBIT {
         return format!("{:.2} Kb", b as f32 / KBIT as f32);
     }
-    format!("{}b", b)
+    format!("{} b", b)
 }

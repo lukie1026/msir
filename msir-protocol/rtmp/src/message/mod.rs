@@ -355,7 +355,10 @@ impl RtmpMessage {
             ]),
             additional_arguments: vec![fast_create_amf0_obj(vec![
                 // FIXME: do not hardcode
-                ("msir_version", Amf0Value::Utf8String("v0.1.0".to_string())),
+                (
+                    "msir_version",
+                    Amf0Value::Utf8String(msir_core::VERSION.to_string()),
+                ),
                 ("msir_uid", Amf0Value::Utf8String(uid)),
             ])],
         };
@@ -389,7 +392,10 @@ impl RtmpMessage {
                 (
                     "data",
                     fast_create_amf0_obj(vec![
-                        ("msir_version", Amf0Value::Utf8String("v0.1.0".to_string())),
+                        (
+                            "msir_version",
+                            Amf0Value::Utf8String(msir_core::VERSION.to_string()),
+                        ),
                         ("msir_auther", Amf0Value::Utf8String("Lukie".to_string())),
                     ]),
                 ),

@@ -1,9 +1,11 @@
+use serde_derive::Serialize;
+
 pub mod client;
 mod context;
 pub mod error;
 pub mod server;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum RtmpConnType {
     Play,
     FlvPlay,
