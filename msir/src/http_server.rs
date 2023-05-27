@@ -43,9 +43,9 @@ pub async fn http_server_start(
         }
     });
 
-    Server::bind(&addr).serve(make_service).await?;
-
     info!("Listening on: {}", addr);
+    
+    Server::bind(&addr).serve(make_service).await?;
 
     Ok(())
 }

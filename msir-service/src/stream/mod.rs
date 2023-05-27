@@ -80,7 +80,6 @@ impl Manager {
     }
 
     pub async fn run(mut self) -> Result<(), StreamError> {
-        info!("Straem Manager daemon start...");
         while let Some(ev) = self.conn_rx.recv().await {
             match ev {
                 StreamEvent::Register(ev) => self.register(ev).await,

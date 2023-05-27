@@ -61,12 +61,12 @@ pub async fn api_server_start(
     );
 
     let addr = config.listen.clone().unwrap().parse()?;
+    info!("Listening on: {}", addr);
+    
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
         .unwrap();
-
-    info!("Listening on: {}", addr);
 
     Ok(())
 }
