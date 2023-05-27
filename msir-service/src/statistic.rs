@@ -1,4 +1,5 @@
 use msir_core::utils;
+use prometheus::{CounterVec, Encoder, Gauge, GaugeVec, Opts, Registry};
 use rtmp::connection::RtmpConnType;
 use serde_derive::Serialize;
 use std::{
@@ -16,12 +17,14 @@ pub type ConnToStatChanRx = mpsc::UnboundedReceiver<StatEvent>;
 pub type QueryConnsResponse = oneshot::Sender<HashMap<String, ConnStat>>;
 pub type QueryStreamsResponse = oneshot::Sender<HashMap<String, StreamStat>>;
 pub type QuerySummariesResponse = oneshot::Sender<SummariesStat>;
+pub type QueryMetricsResponse = oneshot::Sender<String>;
 
 pub enum StatEvent {
     CreateConn(String, ConnStat),
     DeleteConn(String, ConnStat),
     UpdateConn(String, ConnStat),
 
+    QueryMetrics(QueryMetricsResponse),
     QueryConn(String, QueryConnsResponse),
     QueryStream(String, QueryStreamsResponse),
     QuerySummaries(QuerySummariesResponse),
@@ -29,6 +32,7 @@ pub enum StatEvent {
 
 pub struct Statistic {
     rx: ConnToStatChanRx,
+    metrics: Metrics,
     conns: HashMap<String, ConnStat>,
     streams: HashMap<String, StreamStat>,
     summaries: SummariesStat,
@@ -38,6 +42,7 @@ impl Statistic {
     pub fn new(rx: ConnToStatChanRx) -> Self {
         Self {
             rx,
+            metrics: Metrics::new(),
             conns: HashMap::new(),
             streams: HashMap::new(),
             summaries: SummariesStat::new(String::from(msir_core::VERSION)),
@@ -56,6 +61,7 @@ impl Statistic {
                             StatEvent::DeleteConn(uid, cs) => self.on_delete_conn(uid, cs),
                             StatEvent::UpdateConn(uid, cs) => self.on_update_conn(uid, cs),
 
+                            StatEvent::QueryMetrics(tx) => self.on_query_metrics(tx),
                             StatEvent::QueryConn(filter, tx) => self.on_query_conns(filter, tx),
                             StatEvent::QueryStream(filter, tx) => self.on_query_streams(filter, tx),
                             StatEvent::QuerySummaries(tx) => self.on_query_summaries(tx),
@@ -76,6 +82,10 @@ impl Statistic {
         let stream_key = stat.stream_key.clone();
         let conn_type = stat.conn_type.clone();
         self.conns.insert(uid, stat);
+        self.metrics
+            .conn_gauge
+            .with_label_values(&[conn_type.as_str()])
+            .inc();
         // PullClient need to first call than player
         if conn_type.is_play() && !self.streams.contains_key(&stream_key) {
             error!("No publish stats record before player stats arrived");
@@ -92,12 +102,22 @@ impl Statistic {
     fn on_update_conn(&mut self, uid: String, stat: ConnStat) {
         if let Some(conn) = self.conns.get_mut(&uid) {
             let delta_send_bytes = stat.send_bytes - conn.send_bytes;
+            let delta_recv_bytes = stat.recv_bytes - conn.recv_bytes;
             conn.audio_count = stat.audio_count;
             conn.video_count = stat.video_count;
             conn.recv_bytes = stat.recv_bytes;
             conn.send_bytes = stat.send_bytes;
             conn.conn_type = stat.conn_type;
             conn.stream_key = stat.stream_key;
+
+            self.metrics
+                .recv_bytes_counter
+                .with_label_values(&[conn.conn_type.as_str()])
+                .inc_by(delta_recv_bytes as f64);
+            self.metrics
+                .send_bytes_counter
+                .with_label_values(&[conn.conn_type.as_str()])
+                .inc_by(delta_send_bytes as f64);
 
             self.streams.get_mut(&conn.stream_key).map(|s| {
                 if conn.conn_type.is_publish() {
@@ -114,6 +134,24 @@ impl Statistic {
 
     fn on_delete_conn(&mut self, uid: String, stat: ConnStat) {
         let conn = self.conns.remove(&uid);
+
+        self.metrics
+            .conn_gauge
+            .with_label_values(&[stat.conn_type.as_str()])
+            .dec();
+        if let Some(conn) = &conn {
+            let delta_send_bytes = stat.send_bytes - conn.send_bytes;
+            let delta_recv_bytes = stat.recv_bytes - conn.recv_bytes;
+            self.metrics
+                .recv_bytes_counter
+                .with_label_values(&[conn.conn_type.as_str()])
+                .inc_by(delta_recv_bytes as f64);
+            self.metrics
+                .send_bytes_counter
+                .with_label_values(&[conn.conn_type.as_str()])
+                .inc_by(delta_send_bytes as f64);
+        }
+
         match stat.conn_type.is_publish() {
             true => {
                 self.streams.remove(&stat.stream_key);
@@ -128,6 +166,16 @@ impl Statistic {
                 });
             }
         }
+    }
+
+    fn on_query_metrics(&mut self, tx: QueryMetricsResponse) {
+        self.metrics
+            .cpu_percent_gauge
+            .set(self.summaries.cpu_percent.into());
+        self.metrics
+            .mem_mbytes_gauge
+            .set(self.summaries.mem_mbytes as f64);
+        let _ = tx.send(self.metrics.dumps_txt());
     }
 
     fn on_query_streams(&mut self, filter: String, tx: QueryStreamsResponse) {
@@ -322,6 +370,80 @@ impl SummariesStat {
     }
 
     fn update(&mut self, intval: u64) {}
+}
+
+struct Metrics {
+    reg: Registry,
+    conn_gauge: GaugeVec,
+    recv_bytes_counter: CounterVec,
+    send_bytes_counter: CounterVec,
+    cpu_percent_gauge: Gauge,
+    mem_mbytes_gauge: Gauge,
+}
+
+impl Metrics {
+    fn new() -> Self {
+        let local_ip = utils::get_local_ip().unwrap_or(String::from("0.0.0.0"));
+        let reg = Registry::new();
+        let conn_gauge = GaugeVec::new(
+            Opts::new("msir_conn_gauge", "connection gauge help")
+                .const_label("misr_ip", local_ip.as_str()),
+            &["type"],
+        )
+        .unwrap();
+        let recv_bytes_counter = CounterVec::new(
+            Opts::new("msir_recv_bytes_counter", "recv bytes counter help")
+                .const_label("misr_ip", local_ip.as_str()),
+            &["type"],
+        )
+        .unwrap();
+        let send_bytes_counter = CounterVec::new(
+            Opts::new("msir_send_bytes_counter", "send bytes counter help")
+                .const_label("misr_ip", local_ip.as_str()),
+            &["type"],
+        )
+        .unwrap();
+        let cpu_percent_gauge = Gauge::with_opts(
+            Opts::new("msir_cpu_percent_gauge", "cpu percent gauge help")
+                .const_label("misr_ip", local_ip.as_str()),
+        )
+        .unwrap();
+        let mem_mbytes_gauge = Gauge::with_opts(
+            Opts::new("msir_mem_mbytes_gauge", "mem mbytes gauge help")
+                .const_label("misr_ip", local_ip.as_str()),
+        )
+        .unwrap();
+        reg.register(Box::new(conn_gauge.clone())).unwrap();
+        reg.register(Box::new(recv_bytes_counter.clone())).unwrap();
+        reg.register(Box::new(send_bytes_counter.clone())).unwrap();
+        reg.register(Box::new(cpu_percent_gauge.clone())).unwrap();
+        reg.register(Box::new(mem_mbytes_gauge.clone())).unwrap();
+        Self {
+            reg,
+            conn_gauge,
+            recv_bytes_counter,
+            send_bytes_counter,
+            cpu_percent_gauge,
+            mem_mbytes_gauge,
+        }
+    }
+
+    fn dumps_txt(&mut self) -> String {
+        let encoder = prometheus::TextEncoder::new();
+        let mut buffer = Vec::new();
+
+        if let Err(e) = encoder.encode(&self.reg.gather(), &mut buffer) {
+            error!("could not encode prometheus metrics: {}", e);
+        };
+        let res = match String::from_utf8(buffer.clone()) {
+            Ok(v) => v,
+            Err(e) => {
+                error!("prometheus metrics could not be from_utf8'd: {}", e);
+                String::default()
+            }
+        };
+        res
+    }
 }
 
 const KBIT: u64 = 1024;

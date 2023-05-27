@@ -48,21 +48,24 @@ pub async fn api_server_start(
         return Ok(());
     }
 
-    let app = Router::new().nest(
-        "/api/v1",
-        Router::new()
-            .route("/", get(api_root))
-            .route("/summaries", get(api_summaries))
-            .route("/clients", get(api_clients))
-            .route("/client/:cid", get(api_client_byid))
-            .route("/streams", get(api_streams))
-            .route("/stream/:sid", get(api_stream_byid))
-            .with_state((stream_tx, stat_tx)),
-    );
+    let app = Router::new()
+        .nest(
+            "/api/v1",
+            Router::new()
+                .route("/", get(api_root))
+                .route("/summaries", get(api_summaries))
+                .route("/clients", get(api_clients))
+                .route("/client/:cid", get(api_client_byid))
+                .route("/streams", get(api_streams))
+                .route("/stream/:sid", get(api_stream_byid))
+                .with_state((stream_tx, stat_tx.clone())),
+        )
+        .route("/metrics", get(metrics_handle))
+        .with_state(stat_tx);
 
     let addr = config.listen.clone().unwrap().parse()?;
     info!("Listening on: {}", addr);
-    
+
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
@@ -233,5 +236,19 @@ async fn api_stream_byid(
                 data: ApiRespData::Error("internal error".to_string()),
             })
         }
+    }
+}
+
+async fn metrics_handle(State(stat_tx): State<ConnToStatChanTx>) -> impl IntoResponse {
+    let (tx, rx) = oneshot::channel();
+    let query = StatEvent::QueryMetrics(tx);
+
+    if let Err(_) = stat_tx.send(query) {
+        return String::default();
+    }
+
+    match rx.await {
+        Ok(res) => res,
+        Err(_) => String::default(),
     }
 }

@@ -33,6 +33,18 @@ impl RtmpConnType {
             _ => false,
         }
     }
+
+    pub fn as_str(&self) -> &str {
+        return match self {
+            RtmpConnType::Pull => "pull",
+            RtmpConnType::Play => "play",
+            RtmpConnType::FlvPlay => "flv-play",
+            RtmpConnType::FmlePublish => "publish",
+            RtmpConnType::FlashPublish => "publish",
+            RtmpConnType::HaivisionPublish => "publish",
+            RtmpConnType::Unknow => "unknow",
+        };
+    }
 }
 
 pub enum RtmpCtrlAction {
